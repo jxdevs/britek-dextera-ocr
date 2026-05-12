@@ -236,14 +236,34 @@ Aislar el riesgo más alto del MVP (que Gemini extraiga bien facturas reales) **
 
 **Fuera de alcance de este sprint:** persistencia, auth, storage permanente, colas. Cuando el prompt esté afinado, se reusan `GeminiService` y la UI casi tal cual en Sprint 1.
 
-### Sprint 1 — Núcleo sin IA ni WhatsApp (3–4 días)
-- Modelos Sequelize + migrations + seeders (1 admin, 2 workers, 1 caja individual, 1 compartida).
-- Auth JWT del aprobador.
-- CRUD de workers y cajas (con asignaciones).
-- `POST /invoices` que recibe imagen + datos manuales (simula el resultado de IA).
-- Pantalla de cola y detalle de aprobación funcionando con datos reales.
-- Transacción de aprobación con `FOR UPDATE`.
-- **Demo posible:** subir factura desde la web, aprobar, ver saldo decrementar.
+### Sprint 1 — Núcleo sin WhatsApp (4 sub-sprints incrementales)
+
+#### Sprint 1.0 — Capa de datos ⏩ EN CURSO
+- Docker Compose con Postgres 16.
+- Sequelize + sequelize-typescript + `@nestjs/sequelize`.
+- 6 modelos con asociaciones: `Worker`, `PettyCashBox`, `BoxAssignment`, `Invoice`, `Approval`, `WhatsappEvent`.
+- Seed script con 1 admin, 1 aprobador, 3 trabajadores, 1 caja individual y 1 caja compartida.
+- `DB_SYNC=true` en dev hace que Sequelize cree el schema al arrancar la API (migrations vienen en Sprint 1.5).
+
+#### Sprint 1.1 — Auth JWT + Workers CRUD
+- `AuthModule` con login email+password (bcrypt) y JWT.
+- Guards `JwtAuthGuard` y `RolesGuard`.
+- `WorkersModule` con CRUD restringido a admin.
+- Pantalla de login en frontend + página de gestión de trabajadores.
+
+#### Sprint 1.2 — Cajas menores
+- `PettyCashModule`: abrir caja, cerrar caja, asignar trabajadores, consultar saldo, listar movimientos.
+- Página de cajas en el frontend con creación de cajas individuales y compartidas.
+
+#### Sprint 1.3 — Facturas + flujo de aprobación
+- `StorageModule` con impl local (filesystem en `./uploads`).
+- `POST /invoices` recibe imagen, llama Gemini (reusa el `GeminiService` del banco de pruebas), crea factura `pending` sin caja.
+- `POST /approvals` con transacción Sequelize y `SELECT ... FOR UPDATE` sobre la caja.
+- Cola de pendientes + pantalla de detalle/aprobación en el frontend, con la imagen y los campos editables.
+- **Demo posible:** subir factura → IA extrae → aprobador asigna caja + aprueba → saldo decrementa.
+
+#### Sprint 1.5 — Migrations (opcional antes de prod)
+- Reemplazar `sync` por migrations propias con `sequelize-cli` o `umzug`.
 
 ### Sprint 2 — IA (2–3 días)
 - `StorageService` con impl local.

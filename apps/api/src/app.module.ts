@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
+import { DatabaseModule } from './database/database.module';
 import { ExtractionModule } from './modules/extraction/extraction.module';
 
 @Module({
@@ -9,6 +10,7 @@ import { ExtractionModule } from './modules/extraction/extraction.module';
       isGlobal: true,
       load: [configuration],
     }),
+    DatabaseModule,
     ExtractionModule,
   ],
 })

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ocrdemo-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ocrdemo
+      POSTGRES_USER: ocrdemo
+      POSTGRES_PASSWORD: ocrdemo
+    volumes:
+      - ocrdemo-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocrdemo -d ocrdemo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ocrdemo-pg:
