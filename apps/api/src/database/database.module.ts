@@ -19,6 +19,12 @@ import * as models from './models';
         autoLoadModels: true,
         synchronize: config.get<boolean>('db.sync') ?? false,
         logging: false,
+        define: {
+          underscored: true,
+          timestamps: true,
+          createdAt: 'created_at',
+          updatedAt: 'updated_at',
+        },
       }),
     }),
   ],
