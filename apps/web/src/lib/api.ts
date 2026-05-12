@@ -291,6 +291,24 @@ export const approvals = {
     }),
 };
 
+// ============ WhatsApp events ============
+
+export interface WhatsappEvent {
+  id: string;
+  worker_id: string | null;
+  kapso_message_id: string;
+  raw_payload: Record<string, unknown>;
+  processed: boolean;
+  error: string | null;
+  created_at: string;
+  worker?: { id: string; name: string; phone: string } | null;
+}
+
+export const whatsapp = {
+  events: (limit = 50) =>
+    request<WhatsappEvent[]>(`/whatsapp-events?limit=${limit}`),
+};
+
 // ============ Extraction (legacy from Sprint 0.5) ============
 
 export interface InvoiceItem {

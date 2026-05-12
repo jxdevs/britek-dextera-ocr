@@ -17,6 +17,11 @@ export default () => ({
     driver: process.env.STORAGE_DRIVER ?? 'local',
     localPath: process.env.LOCAL_STORAGE_PATH ?? './uploads',
   },
+  kapso: {
+    webhookSecret: process.env.KAPSO_WEBHOOK_SECRET ?? '',
+    apiKey: process.env.KAPSO_API_KEY ?? '',
+    apiUrl: process.env.KAPSO_API_URL ?? 'https://api.kapso.ai/v1',
+  },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY ?? '',
     defaultModel: process.env.GEMINI_DEFAULT_MODEL ?? 'gemini-2.5-flash',

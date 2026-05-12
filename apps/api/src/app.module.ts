@@ -8,6 +8,7 @@ import { ExtractionModule } from './modules/extraction/extraction.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { PettyCashModule } from './modules/petty-cash/petty-cash.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { WorkersModule } from './modules/workers/workers.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { WorkersModule } from './modules/workers/workers.module';
     PettyCashModule,
     InvoicesModule,
     ApprovalsModule,
+    WhatsappModule,
     ExtractionModule,
   ],
 })

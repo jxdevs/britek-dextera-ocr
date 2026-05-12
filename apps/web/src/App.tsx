@@ -8,6 +8,7 @@ import FacturaDetailPage from './pages/FacturaDetailPage';
 import FacturasPendingPage from './pages/FacturasPendingPage';
 import LoginPage from './pages/LoginPage';
 import TestExtraction from './pages/TestExtraction';
+import WhatsappEventsPage from './pages/WhatsappEventsPage';
 import WorkersPage from './pages/WorkersPage';
 
 export default function App() {
@@ -61,6 +62,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={['admin', 'approver']}>
                   <FacturaDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/whatsapp"
+              element={
+                <ProtectedRoute roles={['admin']}>
+                  <WhatsappEventsPage />
                 </ProtectedRoute>
               }
             />
