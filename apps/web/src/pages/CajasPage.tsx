@@ -1,0 +1,158 @@
+import { ChevronRight, Loader2, Plus, Users, User } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { BoxFormModal } from '../components/BoxFormModal';
+import { pettyCash, type PettyCashBox } from '../lib/api';
+import { cn, formatMoney } from '../lib/utils';
+
+export default function CajasPage() {
+  const [items, setItems] = useState<PettyCashBox[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setItems(await pettyCash.list());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <div className="flex items-end justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Cajas menores</h2>
+          <p className="text-sm text-slate-600">
+            Individual: anticipo de un trabajador. Compartida: bolsa común para varios.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 hover:bg-slate-800 px-3 py-2 text-sm font-medium text-white"
+        >
+          <Plus className="size-4" />
+          Nueva caja
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-sm text-rose-800">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="py-12 flex justify-center">
+          <Loader2 className="size-5 animate-spin text-slate-400" />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-lg py-12 text-center text-sm text-slate-500">
+          No hay cajas abiertas todavía.
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {items.map((box) => (
+            <BoxCard key={box.id} box={box} />
+          ))}
+        </div>
+      )}
+
+      {creating && (
+        <BoxFormModal
+          mode="create"
+          title="Abrir nueva caja"
+          onClose={() => setCreating(false)}
+          onSubmit={async (input) => {
+            await pettyCash.create(input);
+            setCreating(false);
+            await load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BoxCard({ box }: { box: PettyCashBox }) {
+  const initial = parseFloat(box.initial_amount);
+  const current = parseFloat(box.current_balance);
+  const pct = initial > 0 ? (current / initial) * 100 : 0;
+
+  const primary = box.workers.find((w) => w.BoxAssignment.is_primary);
+  const others = box.workers.filter((w) => !w.BoxAssignment.is_primary);
+
+  return (
+    <Link
+      to={`/cajas/${box.id}`}
+      className="block bg-white border border-slate-200 rounded-lg hover:border-slate-300 hover:shadow-sm transition-all"
+    >
+      <div className="px-5 py-4 flex items-center gap-6">
+        <div className="flex-shrink-0">
+          <div
+            className={cn(
+              'size-10 rounded-lg flex items-center justify-center',
+              box.type === 'individual' ? 'bg-sky-100 text-sky-700' : 'bg-emerald-100 text-emerald-700',
+            )}
+          >
+            {box.type === 'individual' ? <User className="size-5" /> : <Users className="size-5" />}
+          </div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-slate-900 truncate">{box.name}</p>
+            <span
+              className={cn(
+                'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ring-1 ring-inset',
+                box.status === 'open'
+                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                  : 'bg-slate-100 text-slate-600 ring-slate-200',
+              )}
+            >
+              {box.status === 'open' ? 'Abierta' : 'Cerrada'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {box.code} ·{' '}
+            {primary ? (
+              <>
+                {primary.name}
+                {others.length > 0 && ` +${others.length} más`}
+              </>
+            ) : (
+              `${box.workers.length} trabajador(es)`
+            )}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-semibold tabular-nums text-slate-900">
+            {formatMoney(current)}
+          </p>
+          <p className="text-xs text-slate-500 tabular-nums">
+            de {formatMoney(initial)} ({pct.toFixed(0)}%)
+          </p>
+          <div className="mt-1 w-32 bg-slate-100 rounded-full h-1 overflow-hidden">
+            <div
+              className={cn(
+                'h-full transition-all',
+                pct > 50 ? 'bg-emerald-500' : pct > 20 ? 'bg-amber-500' : 'bg-rose-500',
+              )}
+              style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+            />
+          </div>
+        </div>
+        <ChevronRight className="size-4 text-slate-400" />
+      </div>
+    </Link>
+  );
+}

@@ -1,10 +1,11 @@
-import { FileText, LogOut, ScanLine, Users } from 'lucide-react';
+import { FileText, LogOut, ScanLine, Users, Wallet } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { cn } from '../lib/utils';
 
 const navItems = [
   { to: '/workers', label: 'Trabajadores', icon: Users, roles: ['admin'] as const },
+  { to: '/cajas', label: 'Cajas menores', icon: Wallet, roles: ['admin', 'approver'] as const },
   { to: '/test-extraction', label: 'Test de extracción', icon: ScanLine, roles: null },
 ];
 

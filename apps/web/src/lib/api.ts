@@ -109,6 +109,81 @@ export const workers = {
   remove: (id: string) => request<{ id: string }>(`/workers/${id}`, { method: 'DELETE' }),
 };
 
+// ============ Petty cash ============
+
+export type BoxType = 'individual' | 'shared';
+export type BoxStatus = 'open' | 'closed';
+
+export interface BoxWorker {
+  id: string;
+  name: string;
+  document_number: string;
+  phone: string;
+  BoxAssignment: { is_primary: boolean };
+}
+
+export interface PettyCashBox {
+  id: string;
+  code: string;
+  name: string;
+  type: BoxType;
+  status: BoxStatus;
+  initial_amount: string;
+  current_balance: string;
+  opened_at: string;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  workers: BoxWorker[];
+}
+
+export interface CreateBoxInput {
+  code: string;
+  name: string;
+  type: BoxType;
+  initial_amount: number;
+  worker_ids: string[];
+  primary_worker_id?: string;
+}
+
+export interface Movement {
+  id: string;
+  invoice_id: string;
+  approver_id: string;
+  action: 'approve' | 'reject';
+  comments: string | null;
+  created_at: string;
+  invoice: {
+    id: string;
+    vendor_name: string | null;
+    invoice_number: string | null;
+    invoice_date: string | null;
+    total: string;
+  };
+  approver: { id: string; name: string };
+}
+
+export const pettyCash = {
+  list: () => request<PettyCashBox[]>('/petty-cash'),
+  get: (id: string) => request<PettyCashBox>(`/petty-cash/${id}`),
+  create: (input: CreateBoxInput) =>
+    request<PettyCashBox>('/petty-cash', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  close: (id: string) =>
+    request<PettyCashBox>(`/petty-cash/${id}/close`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  assign: (id: string, worker_ids: string[], primary_worker_id?: string) =>
+    request<PettyCashBox>(`/petty-cash/${id}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ worker_ids, primary_worker_id }),
+    }),
+  movements: (id: string) => request<Movement[]>(`/petty-cash/${id}/movements`),
+};
+
 // ============ Extraction (legacy from Sprint 0.5) ============
 
 export interface InvoiceItem {

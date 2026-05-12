@@ -2,6 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './lib/auth';
+import CajaDetailPage from './pages/CajaDetailPage';
+import CajasPage from './pages/CajasPage';
 import LoginPage from './pages/LoginPage';
 import TestExtraction from './pages/TestExtraction';
 import WorkersPage from './pages/WorkersPage';
@@ -19,12 +21,28 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/workers" replace />} />
+            <Route index element={<Navigate to="/cajas" replace />} />
             <Route
               path="/workers"
               element={
                 <ProtectedRoute roles={['admin']}>
                   <WorkersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cajas"
+              element={
+                <ProtectedRoute roles={['admin', 'approver']}>
+                  <CajasPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cajas/:id"
+              element={
+                <ProtectedRoute roles={['admin', 'approver']}>
+                  <CajaDetailPage />
                 </ProtectedRoute>
               }
             />

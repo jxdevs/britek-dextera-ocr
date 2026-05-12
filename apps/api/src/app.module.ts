@@ -4,6 +4,7 @@ import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExtractionModule } from './modules/extraction/extraction.module';
+import { PettyCashModule } from './modules/petty-cash/petty-cash.module';
 import { WorkersModule } from './modules/workers/workers.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { WorkersModule } from './modules/workers/workers.module';
     DatabaseModule,
     AuthModule,
     WorkersModule,
+    PettyCashModule,
     ExtractionModule,
   ],
 })
