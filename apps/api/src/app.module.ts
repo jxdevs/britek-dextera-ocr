@@ -2,9 +2,12 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExtractionModule } from './modules/extraction/extraction.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
 import { PettyCashModule } from './modules/petty-cash/petty-cash.module';
+import { StorageModule } from './modules/storage/storage.module';
 import { WorkersModule } from './modules/workers/workers.module';
 
 @Module({
@@ -14,9 +17,12 @@ import { WorkersModule } from './modules/workers/workers.module';
       load: [configuration],
     }),
     DatabaseModule,
+    StorageModule,
     AuthModule,
     WorkersModule,
     PettyCashModule,
+    InvoicesModule,
+    ApprovalsModule,
     ExtractionModule,
   ],
 })

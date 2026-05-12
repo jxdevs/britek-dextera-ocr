@@ -13,6 +13,10 @@ export default () => ({
     secret: process.env.JWT_SECRET ?? 'change-me',
     expiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
   },
+  storage: {
+    driver: process.env.STORAGE_DRIVER ?? 'local',
+    localPath: process.env.LOCAL_STORAGE_PATH ?? './uploads',
+  },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY ?? '',
     defaultModel: process.env.GEMINI_DEFAULT_MODEL ?? 'gemini-2.5-flash',

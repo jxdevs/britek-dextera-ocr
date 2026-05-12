@@ -4,6 +4,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './lib/auth';
 import CajaDetailPage from './pages/CajaDetailPage';
 import CajasPage from './pages/CajasPage';
+import FacturaDetailPage from './pages/FacturaDetailPage';
+import FacturasPendingPage from './pages/FacturasPendingPage';
 import LoginPage from './pages/LoginPage';
 import TestExtraction from './pages/TestExtraction';
 import WorkersPage from './pages/WorkersPage';
@@ -21,7 +23,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/cajas" replace />} />
+            <Route index element={<Navigate to="/facturas" replace />} />
             <Route
               path="/workers"
               element={
@@ -43,6 +45,22 @@ export default function App() {
               element={
                 <ProtectedRoute roles={['admin', 'approver']}>
                   <CajaDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/facturas"
+              element={
+                <ProtectedRoute roles={['admin', 'approver']}>
+                  <FacturasPendingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/facturas/:id"
+              element={
+                <ProtectedRoute roles={['admin', 'approver']}>
+                  <FacturaDetailPage />
                 </ProtectedRoute>
               }
             />

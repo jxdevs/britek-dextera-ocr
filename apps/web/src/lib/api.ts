@@ -109,6 +109,15 @@ export const workers = {
   remove: (id: string) => request<{ id: string }>(`/workers/${id}`, { method: 'DELETE' }),
 };
 
+export async function fetchBlobWithAuth(path: string): Promise<Blob> {
+  const token = getToken();
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(`/api${path}`, { headers });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  return res.blob();
+}
+
 // ============ Petty cash ============
 
 export type BoxType = 'individual' | 'shared';
@@ -182,6 +191,104 @@ export const pettyCash = {
       body: JSON.stringify({ worker_ids, primary_worker_id }),
     }),
   movements: (id: string) => request<Movement[]>(`/petty-cash/${id}/movements`),
+};
+
+// ============ Invoices ============
+
+export type InvoiceStatus = 'pending' | 'approved' | 'rejected';
+
+export interface InvoiceWorker {
+  id: string;
+  name: string;
+  document_number: string;
+  phone: string;
+}
+
+export interface InvoiceBox {
+  id: string;
+  code: string;
+  name: string;
+  type: BoxType;
+  status: BoxStatus;
+}
+
+export interface InvoiceApproval {
+  id: string;
+  action: 'approve' | 'reject';
+  comments: string | null;
+  edited_fields: Record<string, unknown> | null;
+  created_at: string;
+  approver: { id: string; name: string };
+}
+
+export interface Invoice {
+  id: string;
+  worker_id: string;
+  box_id: string | null;
+  image_url: string;
+  status: InvoiceStatus;
+  vendor_nit: string | null;
+  vendor_name: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  subtotal: string | null;
+  iva: string | null;
+  total: string;
+  currency: string | null;
+  extracted_data: Record<string, unknown> | null;
+  confidence_score: number | null;
+  submitted_at: string;
+  created_at: string;
+  updated_at: string;
+  worker?: InvoiceWorker;
+  box?: InvoiceBox | null;
+  approvals?: InvoiceApproval[];
+}
+
+export interface EligibleBox {
+  id: string;
+  code: string;
+  name: string;
+  type: BoxType;
+  current_balance: string;
+  sufficient: boolean;
+}
+
+export const invoices = {
+  list: (params?: { status?: InvoiceStatus; worker_id?: string; box_id?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.worker_id) qs.set('worker_id', params.worker_id);
+    if (params?.box_id) qs.set('box_id', params.box_id);
+    const q = qs.toString();
+    return request<Invoice[]>(`/invoices${q ? `?${q}` : ''}`);
+  },
+  get: (id: string) => request<Invoice>(`/invoices/${id}`),
+  eligibleBoxes: (id: string) => request<EligibleBox[]>(`/invoices/${id}/boxes`),
+  create: async (file: File, worker_id: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('worker_id', worker_id);
+    return request<Invoice>('/invoices', { method: 'POST', body: form });
+  },
+};
+
+// ============ Approvals ============
+
+export interface DecideInput {
+  invoice_id: string;
+  action: 'approve' | 'reject';
+  box_id?: string;
+  comments?: string;
+  edited_fields?: Record<string, unknown>;
+}
+
+export const approvals = {
+  decide: (input: DecideInput) =>
+    request<Invoice>('/approvals', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };
 
 // ============ Extraction (legacy from Sprint 0.5) ============
