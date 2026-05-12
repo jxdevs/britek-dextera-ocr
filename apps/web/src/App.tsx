@@ -1,21 +1,38 @@
-import { FileText } from 'lucide-react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Layout } from './components/Layout';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { AuthProvider } from './lib/auth';
+import LoginPage from './pages/LoginPage';
 import TestExtraction from './pages/TestExtraction';
+import WorkersPage from './pages/WorkersPage';
 
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-3">
-          <FileText className="size-6 text-slate-900" />
-          <div>
-            <h1 className="font-semibold text-slate-900">OCRDEMO</h1>
-            <p className="text-xs text-slate-500">Banco de pruebas — extracción de facturas con Gemini</p>
-          </div>
-        </div>
-      </header>
-      <main className="flex-1">
-        <TestExtraction />
-      </main>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/workers" replace />} />
+            <Route
+              path="/workers"
+              element={
+                <ProtectedRoute roles={['admin']}>
+                  <WorkersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/test-extraction" element={<TestExtraction />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
