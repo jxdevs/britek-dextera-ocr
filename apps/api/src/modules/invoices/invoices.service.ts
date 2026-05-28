@@ -88,8 +88,6 @@ export class InvoicesService {
     if (filters.worker_id) where.worker_id = filters.worker_id;
     if (filters.box_id) {
       where.box_id = filters.box_id;
-    } else if (filters.status === 'pending') {
-      where.box_id = { [Op.is]: null };
     }
 
     return this.invoices.findAll({

@@ -1,4 +1,4 @@
-import { ArrowLeft, Loader2, Lock, Pencil, Settings, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, Loader2, Lock, Pencil, Settings, Star, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
@@ -241,7 +241,7 @@ export default function CajaDetailPage() {
         </div>
         {movements.length === 0 ? (
           <div className="py-12 text-center text-sm text-slate-500">
-            Sin movimientos. Aparecerán aquí cuando se aprueben facturas (Sprint 1.3).
+            Sin movimientos. Aparecerán aquí cuando se aprueben facturas.
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -252,11 +252,16 @@ export default function CajaDetailPage() {
                 <th className="text-left px-4 py-2 font-medium">Factura</th>
                 <th className="text-right px-4 py-2 font-medium">Monto</th>
                 <th className="text-left px-4 py-2 font-medium">Aprobador</th>
+                <th className="text-center px-4 py-2 font-medium">Soporte</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {movements.map((m) => (
-                <tr key={m.id}>
+                <tr
+                  key={m.id}
+                  className="hover:bg-slate-50 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/facturas/${m.invoice.id}`)}
+                >
                   <td className="px-4 py-2 text-slate-700 tabular-nums">
                     {new Date(m.created_at).toLocaleDateString('es-CO')}
                   </td>
@@ -268,6 +273,12 @@ export default function CajaDetailPage() {
                     {formatMoney(parseFloat(m.invoice.total))}
                   </td>
                   <td className="px-4 py-2 text-slate-700">{m.approver.name}</td>
+                  <td className="px-4 py-2 text-center">
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900">
+                      <Eye className="size-3.5" />
+                      Ver
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

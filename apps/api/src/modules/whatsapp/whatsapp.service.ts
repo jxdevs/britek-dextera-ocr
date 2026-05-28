@@ -124,10 +124,6 @@ export class WhatsappService {
     }
   }
 
-  // ──────────────────────────────────────────────────────────
-  // Text handler
-  // ──────────────────────────────────────────────────────────
-
   private async handleText(worker: Worker, text: string) {
     // If there's an active session, remind them to use buttons
     const session = this.getSession(worker.phone);
@@ -139,46 +135,59 @@ export class WhatsappService {
       return;
     }
 
-    const cmd = text.toLowerCase();
+    const cmd = text.toLowerCase().trim();
+
+    // Check for balance query
     if (cmd === 'saldo' || cmd === 'cajas' || cmd === 'mi saldo') {
-      const boxes = await this.boxes.findAll({
-        where: { status: 'open' },
-        include: [
-          {
-            model: Worker,
-            where: { id: worker.id },
-            required: true,
-            attributes: [],
-            through: { attributes: [] },
-          },
-        ],
-      });
-      if (boxes.length === 0) {
-        await this.kapso.sendText(
-          worker.phone,
-          'No tienes cajas abiertas asignadas. Contacta al administrador.',
-        );
-        return;
-      }
-      const lines = boxes.map(
-        (b) =>
-          `• ${b.code} (${b.name}): $${formatCOP(b.current_balance)} disponible`,
-      );
+      await this.handleSaldo(worker);
+      return;
+    }
+
+    // For greetings, help, or any other text → show main menu with interactive buttons
+    await this.sendMainMenu(worker);
+  }
+
+  /** Sends the main menu with interactive buttons */
+  private async sendMainMenu(worker: Worker) {
+    await this.kapso.sendInteractiveButtons(
+      worker.phone,
+      `¡Hola ${worker.name.split(' ')[0]}! 👋\n\nSoy tu asistente de caja menor. ¿Qué deseas hacer?`,
+      [
+        { id: 'menu_factura', title: '📸 Subir factura' },
+        { id: 'menu_saldo', title: '💰 Ver saldo' },
+      ],
+      'OCRDEMO · Caja menor',
+    );
+  }
+
+  /** Handles balance query */
+  private async handleSaldo(worker: Worker) {
+    const boxes = await this.boxes.findAll({
+      where: { status: 'open' },
+      include: [
+        {
+          model: Worker,
+          where: { id: worker.id },
+          required: true,
+          attributes: [],
+          through: { attributes: [] },
+        },
+      ],
+    });
+    if (boxes.length === 0) {
       await this.kapso.sendText(
         worker.phone,
-        `Tus cajas activas:\n${lines.join('\n')}`,
+        'No tienes cajas abiertas asignadas. Contacta al administrador.',
       );
       return;
     }
-
-    if (cmd === 'ayuda' || cmd === 'help') {
-      await this.kapso.sendText(worker.phone, helpText());
-      return;
-    }
-
+    const lines = boxes.map(
+      (b) =>
+        `• ${b.code} (${b.name}): $${formatCOP(b.current_balance)} disponible`,
+    );
     await this.kapso.sendText(
       worker.phone,
-      'No entendí. Envíame la foto de tu factura o escribe "saldo" para ver tus cajas. Escribe "ayuda" para ver opciones.',
+      `💰 *Tus cajas activas:*\n${lines.join('\n')}`,
     );
   }
 
@@ -264,12 +273,23 @@ export class WhatsappService {
       return;
     }
 
-    const session = this.getSession(worker.phone);
-    if (!session) {
+    // Handle main menu buttons (no session needed)
+    if (buttonId === 'menu_factura') {
       await this.kapso.sendText(
         worker.phone,
-        'No hay una factura pendiente. Envía una foto de tu factura para empezar.',
+        '📸 *Envíame la foto de tu factura* y la procesaré automáticamente.',
       );
+      return;
+    }
+    if (buttonId === 'menu_saldo') {
+      await this.handleSaldo(worker);
+      return;
+    }
+
+    // Invoice confirmation/rejection requires active session
+    const session = this.getSession(worker.phone);
+    if (!session) {
+      await this.sendMainMenu(worker);
       return;
     }
 
@@ -355,22 +375,27 @@ export class WhatsappService {
   }
 
   // ──────────────────────────────────────────────────────────
-  // Reject: discard invoice and reset
+  // Reject: delete invoice entirely (OCR data was wrong)
+  // 'rejected' status is only for approver rejections from web
   // ──────────────────────────────────────────────────────────
 
   private async rejectInvoice(worker: Worker, invoiceId: string) {
     const invoice = await this.invoices.findByPk(invoiceId);
-    if (invoice && invoice.status === 'pending') {
-      await invoice.update({ status: 'rejected' });
-
-      // Create rejection record
-      await this.approvals.create({
-        invoice_id: invoice.id,
-        approver_id: worker.id,
-        action: 'reject',
-        comments: 'Rechazada por el trabajador vía WhatsApp (datos incorrectos)',
-        edited_fields: null,
-      });
+    if (invoice) {
+      // Delete stored image file
+      if (invoice.image_url) {
+        try {
+          const fs = await import('fs');
+          const path = await import('path');
+          const uploadsDir = this.config.get<string>('uploadsDir') ?? 'uploads';
+          const abs = path.resolve(uploadsDir, invoice.image_url);
+          await fs.promises.unlink(abs);
+        } catch {
+          // ignore if file doesn't exist
+        }
+      }
+      // Delete the invoice record
+      await invoice.destroy();
     }
 
     this.clearSession(worker.phone);
