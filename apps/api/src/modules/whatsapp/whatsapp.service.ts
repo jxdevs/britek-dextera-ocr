@@ -91,7 +91,7 @@ export class WhatsappService {
       if (!worker) {
         await this.kapso.sendText(
           phone,
-          'No estás registrado en OCRDEMO. Contacta al administrador.',
+          'No estás registrado en Britek+Dextera. Contacta al administrador.',
         );
         await event.update({ processed: true });
         return { ok: true, unknown_worker: true };
@@ -156,7 +156,7 @@ export class WhatsappService {
         { id: 'menu_factura', title: '📸 Subir factura' },
         { id: 'menu_saldo', title: '💰 Ver saldo' },
       ],
-      'OCRDEMO · Caja menor',
+      'Britek+Dextera · Caja menor',
     );
   }
 

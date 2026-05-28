@@ -26,7 +26,7 @@ export function Layout() {
         <div className="px-4 py-4 flex items-center gap-2 border-b border-slate-800">
           <FileText className="size-5" />
           <div>
-            <p className="text-sm font-semibold text-white">OCRDEMO</p>
+            <p className="text-sm font-semibold text-white">Britek+Dextera</p>
             <p className="text-[10px] uppercase tracking-wide text-slate-400">Caja menor</p>
           </div>
         </div>

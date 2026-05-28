@@ -46,7 +46,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-2 mb-6 justify-center">
           <FileText className="size-7 text-slate-900" />
           <div>
-            <p className="text-lg font-semibold text-slate-900">OCRDEMO</p>
+            <p className="text-lg font-semibold text-slate-900">Britek+Dextera</p>
             <p className="text-xs text-slate-500">Legalización de caja menor</p>
           </div>
         </div>
