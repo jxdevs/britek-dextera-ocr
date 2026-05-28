@@ -74,6 +74,7 @@ export class PettyCashService {
       );
     }
     await this.assertWorkersExist(dto.worker_ids);
+    await this.assertNoOpenBoxForWorkers(dto.worker_ids);
 
     try {
       const box = await this.sequelize.transaction(async (t) => {
@@ -268,6 +269,33 @@ export class PettyCashService {
     const count = await this.workers.count({ where: { id: ids } });
     if (count !== ids.length) {
       throw new BadRequestException('Alguno de los trabajadores no existe');
+    }
+  }
+
+  private async assertNoOpenBoxForWorkers(workerIds: string[]) {
+    // Find open boxes that have any of the given workers assigned
+    const openBoxes = await this.boxes.findAll({
+      where: { status: 'open' },
+      attributes: ['id', 'code', 'name'],
+      include: [
+        {
+          model: Worker,
+          where: { id: workerIds },
+          attributes: ['id', 'name'],
+          through: { attributes: [] },
+          required: true,
+        },
+      ],
+    });
+
+    if (openBoxes.length > 0) {
+      const workerNames = openBoxes
+        .flatMap((b) => (b as any).workers.map((w: Worker) => w.name));
+      const uniqueNames = [...new Set(workerNames)].join(', ');
+      const boxCode = openBoxes[0].code;
+      throw new ConflictException(
+        `El trabajador ${uniqueNames} ya tiene una caja abierta (${boxCode}). Debe cerrarla antes de abrir otra.`,
+      );
     }
   }
 

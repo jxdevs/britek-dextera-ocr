@@ -1,9 +1,9 @@
-import { ChevronRight, Loader2, Plus, Users, User } from 'lucide-react';
+import { ChevronRight, Clock, Loader2, Plus, Users, User } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { pettyCash, type PettyCashBox } from '../lib/api';
-import { cn, formatMoney } from '../lib/utils';
+import { cn, formatMoney, getBoxDeadlineInfo } from '../lib/utils';
 
 export default function CajasPage() {
   const [items, setItems] = useState<PettyCashBox[]>([]);
@@ -92,10 +92,17 @@ function BoxCard({ box }: { box: PettyCashBox }) {
   const primary = box.workers.find((w) => w.BoxAssignment.is_primary);
   const others = box.workers.filter((w) => !w.BoxAssignment.is_primary);
 
+  const deadline = box.status === 'open' ? getBoxDeadlineInfo(box.opened_at) : null;
+
   return (
     <Link
       to={`/cajas/${box.id}`}
-      className="block bg-white border border-slate-200 rounded-lg hover:border-slate-300 hover:shadow-sm transition-all"
+      className={cn(
+        'block bg-white border rounded-lg hover:shadow-sm transition-all',
+        deadline?.severity === 'overdue'
+          ? 'border-rose-300 hover:border-rose-400'
+          : 'border-slate-200 hover:border-slate-300',
+      )}
     >
       <div className="px-5 py-4 flex items-center gap-6">
         <div className="flex-shrink-0">
@@ -151,6 +158,21 @@ function BoxCard({ box }: { box: PettyCashBox }) {
             />
           </div>
         </div>
+        {/* Semáforo de plazo */}
+        {deadline && (
+          <div className="flex items-center gap-1.5 mr-1">
+            <span className={cn('size-2 rounded-full', deadline.dotColor)} />
+            <span className={cn(
+              'text-[11px] font-semibold tabular-nums',
+              deadline.severity === 'overdue' ? 'text-rose-600' :
+              deadline.severity === 'urgent' ? 'text-orange-600' :
+              deadline.severity === 'warning' ? 'text-amber-600' :
+              'text-emerald-600',
+            )}>
+              {deadline.badgeLabel}
+            </span>
+          </div>
+        )}
         <ChevronRight className="size-4 text-slate-400" />
       </div>
     </Link>

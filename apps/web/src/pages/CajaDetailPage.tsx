@@ -1,10 +1,10 @@
-import { ArrowLeft, Eye, Loader2, Lock, Pencil, Settings, Star, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Clock, Eye, Loader2, Lock, Pencil, Settings, Star, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { cn, formatMoney } from '../lib/utils';
+import { cn, formatMoney, getBoxDeadlineInfo } from '../lib/utils';
 
 export default function CajaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -125,14 +125,14 @@ export default function CajaDetailPage() {
               <Settings className="size-4" />
               Editar caja
             </button>
-            <button
+            {/* <button
               type="button"
               onClick={() => setEditing(true)}
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 hover:bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
             >
               <Pencil className="size-4" />
               Asignar trabajadores
-            </button>
+            </button> */}
             <button
               type="button"
               onClick={handleClose}
@@ -200,6 +200,31 @@ export default function CajaDetailPage() {
         />
       </div>
 
+      {/* Semáforo de plazo — solo para cajas abiertas */}
+      {box.status === 'open' && (() => {
+        const deadline = getBoxDeadlineInfo(box.opened_at);
+        return (
+          <div className={cn('flex items-center gap-3 rounded-lg border px-4 py-3', deadline.bannerClasses)}>
+            {deadline.severity === 'overdue' ? (
+              <AlertTriangle className="size-5 shrink-0" />
+            ) : (
+              <Clock className="size-5 shrink-0" />
+            )}
+            <div className="flex-1">
+              <p className="text-sm font-medium">{deadline.bannerLabel}</p>
+              <p className="text-xs mt-0.5 opacity-75">
+                Abierta el {new Date(box.opened_at).toLocaleDateString('es-CO')} — plazo de 7 días
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={cn('size-2.5 rounded-full', deadline.dotColor)} />
+              <span className="text-xs font-semibold uppercase tracking-wide">{deadline.badgeLabel}</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Sección de trabajadores asignados — oculta temporalmente
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200">
           <h3 className="text-sm font-semibold text-slate-900">
@@ -232,6 +257,7 @@ export default function CajaDetailPage() {
           ))}
         </div>
       </div>
+      */}
 
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200">
@@ -286,6 +312,7 @@ export default function CajaDetailPage() {
         )}
       </div>
 
+      {/* Modal de reasignar trabajadores — oculto temporalmente
       {editing && (
         <BoxFormModal
           mode="reassign"
@@ -304,6 +331,7 @@ export default function CajaDetailPage() {
           }}
         />
       )}
+      */}
 
       {editingBox && (
         <EditBoxModal

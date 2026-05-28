@@ -2,9 +2,11 @@ import { Loader2, X } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   ApiError,
+  pettyCash,
   workers as workersApi,
   type BoxType,
   type CreateBoxInput,
+  type PettyCashBox,
   type Worker,
 } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -33,14 +35,34 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyWorkers, setBusyWorkers] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
-    workersApi
-      .list()
-      .then(setAllWorkers)
-      .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron cargar trabajadores'))
-      .finally(() => setLoadingWorkers(false));
-  }, []);
+    const loadData = async () => {
+      try {
+        const [w, boxes] = await Promise.all([
+          workersApi.list(),
+          mode === 'create' ? pettyCash.list() : Promise.resolve([] as PettyCashBox[]),
+        ]);
+        setAllWorkers(w);
+        // Build a map of worker_id → box code for workers that already have an open box
+        const busy = new Map<string, string>();
+        for (const box of boxes) {
+          if (box.status === 'open') {
+            for (const bw of box.workers) {
+              busy.set(bw.id, box.code);
+            }
+          }
+        }
+        setBusyWorkers(busy);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudieron cargar trabajadores');
+      } finally {
+        setLoadingWorkers(false);
+      }
+    };
+    loadData();
+  }, [mode]);
 
   const toggle = (id: string) => {
     setSelected((curr) => {
@@ -197,20 +219,26 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                 allWorkers.map((w) => {
                   const isSelected = selected.includes(w.id);
                   const isPrimary = primary === w.id;
+                  const busyBoxCode = busyWorkers.get(w.id);
+                  const isDisabled = mode === 'create' && !!busyBoxCode;
                   return (
                     <div
                       key={w.id}
                       className={cn(
-                        'flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50',
-                        isSelected && 'bg-slate-50',
+                        'flex items-center gap-2 px-3 py-2',
+                        isDisabled
+                          ? 'opacity-50 cursor-not-allowed bg-slate-50'
+                          : 'cursor-pointer hover:bg-slate-50',
+                        isSelected && !isDisabled && 'bg-slate-50',
                       )}
-                      onClick={() => toggle(w.id)}
+                      onClick={() => !isDisabled && toggle(w.id)}
                     >
                       {/* Fase 2: type === 'individual' ? 'radio' : 'checkbox' */}
                       <input
                         type="radio"
                         checked={isSelected}
                         readOnly
+                        disabled={isDisabled}
                         className="accent-slate-900"
                       />
                       <div className="flex-1 min-w-0">
@@ -220,7 +248,11 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                             ({w.role})
                           </span>
                         </p>
-                        <p className="text-xs text-slate-500 tabular-nums">{w.phone}</p>
+                        {isDisabled ? (
+                          <p className="text-xs text-rose-500">Ya tiene caja abierta: {busyBoxCode}</p>
+                        ) : (
+                          <p className="text-xs text-slate-500 tabular-nums">{w.phone}</p>
+                        )}
                       </div>
                       {/* TODO: Fase 2 - Botón primario para caja compartida
                       {type === 'shared' && isSelected && (
