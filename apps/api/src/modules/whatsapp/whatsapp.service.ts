@@ -223,6 +223,12 @@ export class WhatsappService {
 
     const invoice = await this.invoicesService.createFromUpload(file, worker.id);
 
+    // ── Verification: confirm invoice exists in DB ──
+    const verified = await this.invoices.findByPk(invoice.id);
+    if (!verified) {
+      throw new Error(`Factura ${invoice.id} no se encontró en BD después de crearla`);
+    }
+
     // Build confirmation message with extracted data
     const total = parseFloat(invoice.total);
     const vendor = invoice.vendor_name ?? 'Desconocido';
@@ -362,7 +368,24 @@ export class WhatsappService {
     // Assign box to invoice (stays pending for approver review)
     await invoice.update({ box_id: box.id });
 
+    // ── Verification: reload from DB and confirm it was saved ──
+    await invoice.reload();
+    if (invoice.box_id !== box.id) {
+      this.logger.error(
+        `Verificación fallida: factura ${invoice.id} debía tener box_id=${box.id} pero tiene box_id=${invoice.box_id}`,
+      );
+      await this.kapso.sendText(
+        worker.phone,
+        '⚠️ Hubo un problema guardando tu factura. Por favor reenvía la foto.',
+      );
+      return;
+    }
+
     this.clearSession(worker.phone);
+
+    this.logger.log(
+      `✅ Factura ${invoice.id} confirmada → caja ${box.code} (${box.id}), monto $${formatCOP(total)}`,
+    );
 
     await this.kapso.sendText(
       worker.phone,
