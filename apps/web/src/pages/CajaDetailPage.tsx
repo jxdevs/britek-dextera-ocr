@@ -1,8 +1,8 @@
-import { ArrowLeft, Loader2, Lock, Pencil, Star } from 'lucide-react';
+import { ArrowLeft, Loader2, Lock, Pencil, Settings, Star, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
-import { pettyCash, type Movement, type PettyCashBox } from '../lib/api';
+import { pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cn, formatMoney } from '../lib/utils';
 
@@ -17,7 +17,9 @@ export default function CajaDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [editingBox, setEditingBox] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -117,6 +119,14 @@ export default function CajaDetailPage() {
           <div className="flex gap-2">
             <button
               type="button"
+              onClick={() => setEditingBox(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 hover:bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
+            >
+              <Settings className="size-4" />
+              Editar caja
+            </button>
+            <button
+              type="button"
               onClick={() => setEditing(true)}
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 hover:bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
             >
@@ -131,6 +141,50 @@ export default function CajaDetailPage() {
             >
               {closing ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
               Cerrar caja
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm(`¿Eliminar la caja ${box.code} con TODOS sus movimientos y archivos? Esta acción no se puede deshacer.`)) return;
+                setDeleting(true);
+                try {
+                  await pettyCash.remove(box.id);
+                  navigate('/cajas');
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : 'Error al eliminar');
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+              disabled={deleting}
+              className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 bg-rose-50 hover:bg-rose-100 px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              Eliminar
+            </button>
+          </div>
+        )}
+        {canEdit && box.status === 'closed' && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm(`¿Eliminar la caja ${box.code} con TODOS sus movimientos y archivos? Esta acción no se puede deshacer.`)) return;
+                setDeleting(true);
+                try {
+                  await pettyCash.remove(box.id);
+                  navigate('/cajas');
+                } catch (err) {
+                  alert(err instanceof Error ? err.message : 'Error al eliminar');
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+              disabled={deleting}
+              className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 bg-rose-50 hover:bg-rose-100 px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              Eliminar caja
             </button>
           </div>
         )}
@@ -239,6 +293,145 @@ export default function CajaDetailPage() {
           }}
         />
       )}
+
+      {editingBox && (
+        <EditBoxModal
+          box={box}
+          onClose={() => setEditingBox(false)}
+          onSaved={async () => {
+            setEditingBox(false);
+            await load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditBoxModal({
+  box,
+  onClose,
+  onSaved,
+}: {
+  box: PettyCashBox;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [code, setCode] = useState(box.code);
+  const [name, setName] = useState(box.name);
+  const [initialAmount, setInitialAmount] = useState(box.initial_amount);
+  const [currentBalance, setCurrentBalance] = useState(box.current_balance);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const input: UpdateBoxInput = {};
+      if (code !== box.code) input.code = code;
+      if (name !== box.name) input.name = name;
+      if (initialAmount !== box.initial_amount)
+        input.initial_amount = parseFloat(initialAmount);
+      if (currentBalance !== box.current_balance)
+        input.current_balance = parseFloat(currentBalance);
+
+      await pettyCash.update(box.id, input);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 space-y-4"
+      >
+        <h3 className="text-lg font-semibold text-slate-900">Editar caja</h3>
+
+        {error && (
+          <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-3 py-2">
+            {error}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Código</label>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            required
+            minLength={3}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Nombre</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            required
+            minLength={3}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Monto inicial
+            </label>
+            <input
+              type="number"
+              value={initialAmount}
+              onChange={(e) => setInitialAmount(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              step="0.01"
+              min="0"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Saldo actual
+            </label>
+            <input
+              type="number"
+              value={currentBalance}
+              onChange={(e) => setCurrentBalance(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              step="0.01"
+              min="0"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {saving ? 'Guardando…' : 'Guardar cambios'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

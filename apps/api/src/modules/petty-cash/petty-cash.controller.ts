@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +18,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AssignWorkersDto } from './dto/assign-workers.dto';
 import { CreateBoxDto } from './dto/create-box.dto';
+import { UpdateBoxDto } from './dto/update-box.dto';
 import { PettyCashService } from './petty-cash.service';
 
 @Controller('petty-cash')
@@ -41,6 +44,15 @@ export class PettyCashController {
     return this.service.create(dto, user);
   }
 
+  @Patch(':id')
+  @Roles('admin')
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateBoxDto,
+  ) {
+    return this.service.update(id, dto);
+  }
+
   @Post(':id/close')
   @Roles('admin')
   close(@Param('id', new ParseUUIDPipe()) id: string) {
@@ -60,5 +72,14 @@ export class PettyCashController {
   @Roles('admin', 'approver')
   movements(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.movements(id);
+  }
+
+  @Delete(':id')
+  @Roles('admin')
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.remove(id, user);
   }
 }

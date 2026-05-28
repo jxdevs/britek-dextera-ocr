@@ -1,23 +1,71 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/sequelize';
-import { PettyCashBox, WhatsappEvent, Worker } from '../../database/models';
+import { Sequelize } from 'sequelize-typescript';
+import {
+  Approval,
+  BoxAssignment,
+  Invoice,
+  PettyCashBox,
+  WhatsappEvent,
+  Worker,
+} from '../../database/models';
 import { InvoicesService } from '../invoices/invoices.service';
-import { KapsoWebhookDto } from './dto/kapso-webhook.dto';
 import { KapsoService } from './kapso.service';
+
+/** Mapped message from the controller (already extracted from Kapso v2 payload) */
+export interface IncomingMessage {
+  message_id: string;
+  from: string;
+  type: 'text' | 'image' | 'interactive';
+  text?: string;
+  media_url?: string;
+  media_base64?: string;
+  media_mime_type?: string;
+  interactive?: {
+    type: 'button_reply' | 'list_reply';
+    button_reply?: { id: string; title: string };
+  };
+  timestamp?: string;
+}
+
+// ────────────────────────────────────────────────────────────
+// Conversation state machine (in-memory per phone)
+// ────────────────────────────────────────────────────────────
+interface ConversationSession {
+  state: 'awaiting_confirm';
+  invoiceId: string;
+  expiresAt: Date;
+}
+
+/** TTL for pending confirmation (10 minutes) */
+const SESSION_TTL_MS = 10 * 60 * 1000;
 
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
 
+  /** In-memory sessions indexed by normalized phone */
+  private readonly sessions = new Map<string, ConversationSession>();
+
   constructor(
+    private readonly config: ConfigService,
+    private readonly sequelize: Sequelize,
     @InjectModel(WhatsappEvent) private readonly events: typeof WhatsappEvent,
     @InjectModel(Worker) private readonly workers: typeof Worker,
     @InjectModel(PettyCashBox) private readonly boxes: typeof PettyCashBox,
+    @InjectModel(BoxAssignment) private readonly assignments: typeof BoxAssignment,
+    @InjectModel(Invoice) private readonly invoices: typeof Invoice,
+    @InjectModel(Approval) private readonly approvals: typeof Approval,
     private readonly invoicesService: InvoicesService,
     private readonly kapso: KapsoService,
   ) {}
 
-  async handleIncoming(payload: KapsoWebhookDto) {
+  // ──────────────────────────────────────────────────────────
+  // Main entry point
+  // ──────────────────────────────────────────────────────────
+
+  async handleIncoming(payload: IncomingMessage) {
     const phone = this.normalizePhone(payload.from);
 
     // Idempotencia: si ya procesamos este message_id, devolvemos sin reprocesar.
@@ -49,14 +97,16 @@ export class WhatsappService {
         return { ok: true, unknown_worker: true };
       }
 
-      if (payload.type === 'text') {
-        await this.handleText(worker, (payload.text ?? '').trim());
+      if (payload.type === 'interactive') {
+        await this.handleButtonReply(worker, payload);
       } else if (payload.type === 'image') {
         await this.handleImage(worker, payload);
+      } else if (payload.type === 'text') {
+        await this.handleText(worker, (payload.text ?? '').trim());
       }
 
       await event.update({ processed: true, worker_id: worker.id });
-      return { ok: true, invoice_id: undefined };
+      return { ok: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error procesando mensaje';
       this.logger.error(`Fallo en mensaje ${payload.message_id}: ${message}`, err as Error);
@@ -74,7 +124,21 @@ export class WhatsappService {
     }
   }
 
+  // ──────────────────────────────────────────────────────────
+  // Text handler
+  // ──────────────────────────────────────────────────────────
+
   private async handleText(worker: Worker, text: string) {
+    // If there's an active session, remind them to use buttons
+    const session = this.getSession(worker.phone);
+    if (session) {
+      await this.kapso.sendText(
+        worker.phone,
+        'Tienes una factura pendiente de confirmar. Usa los botones ✅ o ❌ para continuar.',
+      );
+      return;
+    }
+
     const cmd = text.toLowerCase();
     if (cmd === 'saldo' || cmd === 'cajas' || cmd === 'mi saldo') {
       const boxes = await this.boxes.findAll({
@@ -118,7 +182,21 @@ export class WhatsappService {
     );
   }
 
-  private async handleImage(worker: Worker, payload: KapsoWebhookDto) {
+  // ──────────────────────────────────────────────────────────
+  // Image handler → OCR → send confirmation buttons
+  // ──────────────────────────────────────────────────────────
+
+  private async handleImage(worker: Worker, payload: IncomingMessage) {
+    // If there's already a pending session, tell them to resolve it first
+    const existingSession = this.getSession(worker.phone);
+    if (existingSession) {
+      await this.kapso.sendText(
+        worker.phone,
+        'Ya tienes una factura pendiente de confirmar. Usa los botones ✅ o ❌ antes de enviar otra.',
+      );
+      return;
+    }
+
     const { buffer, mimeType } = await this.fetchMedia(payload);
 
     const file = {
@@ -136,22 +214,179 @@ export class WhatsappService {
 
     const invoice = await this.invoicesService.createFromUpload(file, worker.id);
 
+    // Build confirmation message with extracted data
     const total = parseFloat(invoice.total);
-    const vendor = invoice.vendor_name ?? 'el proveedor';
+    const vendor = invoice.vendor_name ?? 'Desconocido';
+    const vendorNit = invoice.vendor_nit ?? '—';
+    const invoiceNum = invoice.invoice_number ?? '—';
+    const invoiceDate = invoice.invoice_date ?? '—';
     const conf = invoice.confidence_score ?? 0;
-    const lowConf = conf > 0 && conf < 0.6;
 
-    await this.kapso.sendText(
+    let confirmMsg = `📋 *Factura detectada:*\n`;
+    confirmMsg += `• Proveedor: ${vendor}\n`;
+    confirmMsg += `• NIT: ${vendorNit}\n`;
+    confirmMsg += `• Factura #: ${invoiceNum}\n`;
+    confirmMsg += `• Fecha: ${invoiceDate}\n`;
+    confirmMsg += `• Total: $${formatCOP(total)} COP\n`;
+
+    if (conf > 0 && conf < 0.6) {
+      confirmMsg += `\n⚠️ _La calidad de la imagen es baja, los datos podrían ser inexactos._\n`;
+    }
+
+    confirmMsg += `\n¿Los datos son correctos?`;
+
+    // Save session
+    this.setSession(worker.phone, {
+      state: 'awaiting_confirm',
+      invoiceId: invoice.id,
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    });
+
+    // Send interactive buttons
+    await this.kapso.sendInteractiveButtons(
       worker.phone,
-      `Recibí tu factura de ${vendor} por $${formatCOP(invoice.total)}. ` +
-        `Quedó en revisión. ID ${invoice.id.slice(0, 8)}.` +
-        (lowConf ? ' La calidad de la imagen es baja, podrían pedirte reenviar.' : '') +
-        (Number.isFinite(total) && total === 0 ? ' No pude leer el total — revisa el aprobador.' : ''),
+      confirmMsg,
+      [
+        { id: 'confirm_invoice', title: '✅ Confirmar' },
+        { id: 'reject_invoice', title: '❌ Rechazar' },
+      ],
     );
   }
 
+  // ──────────────────────────────────────────────────────────
+  // Interactive button reply handler
+  // ──────────────────────────────────────────────────────────
+
+  private async handleButtonReply(worker: Worker, payload: IncomingMessage) {
+    const buttonId = payload.interactive?.button_reply?.id;
+    if (!buttonId) {
+      await this.kapso.sendText(worker.phone, 'No pude procesar esa respuesta.');
+      return;
+    }
+
+    const session = this.getSession(worker.phone);
+    if (!session) {
+      await this.kapso.sendText(
+        worker.phone,
+        'No hay una factura pendiente. Envía una foto de tu factura para empezar.',
+      );
+      return;
+    }
+
+    if (buttonId === 'confirm_invoice') {
+      await this.confirmInvoice(worker, session.invoiceId);
+    } else if (buttonId === 'reject_invoice') {
+      await this.rejectInvoice(worker, session.invoiceId);
+    } else {
+      await this.kapso.sendText(worker.phone, 'Opción no reconocida.');
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Confirm: assign to box, create approval, deduct balance
+  // ──────────────────────────────────────────────────────────
+
+  private async confirmInvoice(worker: Worker, invoiceId: string) {
+    const invoice = await this.invoices.findByPk(invoiceId);
+    if (!invoice || invoice.status !== 'pending') {
+      this.clearSession(worker.phone);
+      await this.kapso.sendText(
+        worker.phone,
+        'La factura ya no está disponible. Envía una nueva foto.',
+      );
+      return;
+    }
+
+    // Find open box(es) assigned to this worker
+    const workerBoxes = await this.boxes.findAll({
+      where: { status: 'open' },
+      include: [
+        {
+          model: Worker,
+          where: { id: worker.id },
+          required: true,
+          attributes: [],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    if (workerBoxes.length === 0) {
+      this.clearSession(worker.phone);
+      await this.kapso.sendText(
+        worker.phone,
+        'No tienes cajas abiertas asignadas. Contacta al administrador. La factura quedó en revisión manual.',
+      );
+      return;
+    }
+
+    const total = parseFloat(invoice.total);
+
+    // Find first box with sufficient balance
+    const box = workerBoxes.find(
+      (b) => parseFloat(b.current_balance) >= total,
+    );
+
+    if (!box) {
+      this.clearSession(worker.phone);
+      const balances = workerBoxes
+        .map((b) => `${b.code}: $${formatCOP(b.current_balance)}`)
+        .join(', ');
+      await this.kapso.sendText(
+        worker.phone,
+        `Saldo insuficiente en tus cajas (${balances}). La factura de $${formatCOP(total)} quedó pendiente de revisión manual.`,
+      );
+      return;
+    }
+
+    // Assign box to invoice (stays pending for approver review)
+    await invoice.update({ box_id: box.id });
+
+    this.clearSession(worker.phone);
+
+    await this.kapso.sendText(
+      worker.phone,
+      `✅ *Factura enviada correctamente*\n` +
+        `• Caja: ${box.code} (${box.name})\n` +
+        `• Monto: $${formatCOP(total)} COP\n` +
+        `• Estado: Pendiente de aprobación\n\n` +
+        `Un aprobador revisará tu factura. Puedes enviar otra cuando quieras.`,
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Reject: discard invoice and reset
+  // ──────────────────────────────────────────────────────────
+
+  private async rejectInvoice(worker: Worker, invoiceId: string) {
+    const invoice = await this.invoices.findByPk(invoiceId);
+    if (invoice && invoice.status === 'pending') {
+      await invoice.update({ status: 'rejected' });
+
+      // Create rejection record
+      await this.approvals.create({
+        invoice_id: invoice.id,
+        approver_id: worker.id,
+        action: 'reject',
+        comments: 'Rechazada por el trabajador vía WhatsApp (datos incorrectos)',
+        edited_fields: null,
+      });
+    }
+
+    this.clearSession(worker.phone);
+
+    await this.kapso.sendText(
+      worker.phone,
+      'Factura descartada. Envía otra foto cuando quieras.',
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Media download helper
+  // ──────────────────────────────────────────────────────────
+
   private async fetchMedia(
-    payload: KapsoWebhookDto,
+    payload: IncomingMessage,
   ): Promise<{ buffer: Buffer; mimeType: string }> {
     if (payload.media_base64) {
       return {
@@ -162,7 +397,17 @@ export class WhatsappService {
     if (!payload.media_url) {
       throw new Error('Mensaje image sin media_url ni media_base64');
     }
-    const res = await fetch(payload.media_url);
+
+    this.logger.log(`Descargando media: ${payload.media_url}`);
+
+    // Kapso media URLs require API key authentication
+    const headers: Record<string, string> = {};
+    if (payload.media_url.includes('kapso.ai')) {
+      const apiKey = this.config.get<string>('kapso.apiKey');
+      if (apiKey) headers['X-API-Key'] = apiKey;
+    }
+
+    const res = await fetch(payload.media_url, { headers });
     if (!res.ok) {
       throw new Error(`No pude descargar la imagen (${res.status})`);
     }
@@ -174,6 +419,33 @@ export class WhatsappService {
     };
   }
 
+  // ──────────────────────────────────────────────────────────
+  // Session helpers
+  // ──────────────────────────────────────────────────────────
+
+  private getSession(phone: string): ConversationSession | null {
+    const normalPhone = this.normalizePhone(phone);
+    const session = this.sessions.get(normalPhone);
+    if (!session) return null;
+    if (new Date() > session.expiresAt) {
+      this.sessions.delete(normalPhone);
+      return null;
+    }
+    return session;
+  }
+
+  private setSession(phone: string, session: ConversationSession) {
+    this.sessions.set(this.normalizePhone(phone), session);
+  }
+
+  private clearSession(phone: string) {
+    this.sessions.delete(this.normalizePhone(phone));
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Events list (admin dashboard)
+  // ──────────────────────────────────────────────────────────
+
   list(limit = 50) {
     return this.events.findAll({
       include: [{ model: Worker, attributes: ['id', 'name', 'phone'] }],
@@ -181,6 +453,10 @@ export class WhatsappService {
       limit,
     });
   }
+
+  // ──────────────────────────────────────────────────────────
+  // Utils
+  // ──────────────────────────────────────────────────────────
 
   private normalizePhone(phone: string): string {
     const digits = phone.replace(/[^\d]/g, '');

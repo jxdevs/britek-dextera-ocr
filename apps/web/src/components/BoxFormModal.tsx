@@ -132,41 +132,45 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
               <div>
                 <span className="text-xs font-medium text-slate-600">Tipo</span>
                 <div className="mt-1 grid grid-cols-2 gap-2">
-                  {(['individual', 'shared'] as BoxType[]).map((t) => (
-                    <button
-                      type="button"
-                      key={t}
-                      disabled={!!lockedType}
-                      onClick={() => {
-                        setType(t);
-                        if (t === 'individual' && selected.length > 1) {
-                          setSelected(selected.slice(0, 1));
-                          setPrimary(selected[0]);
-                        }
-                      }}
+                  {/* Solo Individual en esta fase */}
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded-md border px-3 py-2 text-sm text-left transition-colors border-slate-900 bg-slate-900 text-white"
+                  >
+                    <p className="font-medium">Individual</p>
+                    <p className="text-xs text-slate-300">
+                      1 trabajador con su propio anticipo
+                    </p>
+                  </button>
+
+                  {/* TODO: Fase 2 - Habilitar caja compartida
+                  <button
+                    type="button"
+                    disabled={!!lockedType}
+                    onClick={() => {
+                      setType('shared');
+                      // No recortar selección para shared
+                    }}
+                    className={cn(
+                      'rounded-md border px-3 py-2 text-sm text-left transition-colors',
+                      type === 'shared'
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
+                      lockedType && 'opacity-50 cursor-not-allowed',
+                    )}
+                  >
+                    <p className="font-medium">Compartida</p>
+                    <p
                       className={cn(
-                        'rounded-md border px-3 py-2 text-sm text-left transition-colors',
-                        type === t
-                          ? 'border-slate-900 bg-slate-900 text-white'
-                          : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
-                        lockedType && 'opacity-50 cursor-not-allowed',
+                        'text-xs',
+                        type === 'shared' ? 'text-slate-300' : 'text-slate-500',
                       )}
                     >
-                      <p className="font-medium">
-                        {t === 'individual' ? 'Individual' : 'Compartida'}
-                      </p>
-                      <p
-                        className={cn(
-                          'text-xs',
-                          type === t ? 'text-slate-300' : 'text-slate-500',
-                        )}
-                      >
-                        {t === 'individual'
-                          ? '1 trabajador con su propio anticipo'
-                          : 'Varios trabajadores descuentan'}
-                      </p>
-                    </button>
-                  ))}
+                      Varios trabajadores descuentan
+                    </p>
+                  </button>
+                  */}
                 </div>
               </div>
             </>
@@ -178,9 +182,11 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                 Trabajadores asignados ({selected.length}
                 {type === 'individual' ? '/1' : ''})
               </span>
+              {/* TODO: Fase 2 - Caja compartida
               {type === 'shared' && selected.length > 1 && (
                 <span className="text-xs text-slate-500">El primario recibe la marca ★</span>
               )}
+              */}
             </div>
             <div className="mt-2 border border-slate-200 rounded-md max-h-64 overflow-y-auto divide-y divide-slate-100">
               {loadingWorkers ? (
@@ -200,8 +206,9 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                       )}
                       onClick={() => toggle(w.id)}
                     >
+                      {/* Fase 2: type === 'individual' ? 'radio' : 'checkbox' */}
                       <input
-                        type={type === 'individual' ? 'radio' : 'checkbox'}
+                        type="radio"
                         checked={isSelected}
                         readOnly
                         className="accent-slate-900"
@@ -215,6 +222,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                         </p>
                         <p className="text-xs text-slate-500 tabular-nums">{w.phone}</p>
                       </div>
+                      {/* TODO: Fase 2 - Botón primario para caja compartida
                       {type === 'shared' && isSelected && (
                         <button
                           type="button"
@@ -232,6 +240,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                           {isPrimary ? '★ Primario' : 'Marcar primario'}
                         </button>
                       )}
+                      */}
                     </div>
                   );
                 })

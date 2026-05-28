@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
@@ -15,13 +17,18 @@ import {
   Worker,
 } from '../../database/models';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
+import { StorageService } from '../storage/storage.service';
 import { AssignWorkersDto } from './dto/assign-workers.dto';
 import { CreateBoxDto } from './dto/create-box.dto';
+import { UpdateBoxDto } from './dto/update-box.dto';
 
 @Injectable()
 export class PettyCashService {
+  private readonly logger = new Logger(PettyCashService.name);
+
   constructor(
     private readonly sequelize: Sequelize,
+    private readonly storage: StorageService,
     @InjectModel(PettyCashBox) private readonly boxes: typeof PettyCashBox,
     @InjectModel(BoxAssignment) private readonly assignments: typeof BoxAssignment,
     @InjectModel(Worker) private readonly workers: typeof Worker,
@@ -113,6 +120,31 @@ export class PettyCashService {
     return this.findOne(id);
   }
 
+  async update(id: string, dto: UpdateBoxDto) {
+    const box = await this.boxes.findByPk(id);
+    if (!box) throw new NotFoundException('Caja no encontrada');
+
+    const updates: Record<string, unknown> = {};
+    if (dto.code !== undefined) updates.code = dto.code;
+    if (dto.name !== undefined) updates.name = dto.name;
+    if (dto.initial_amount !== undefined)
+      updates.initial_amount = dto.initial_amount.toFixed(2);
+    if (dto.current_balance !== undefined)
+      updates.current_balance = dto.current_balance.toFixed(2);
+
+    if (Object.keys(updates).length === 0) {
+      return this.findOne(id);
+    }
+
+    try {
+      await box.update(updates);
+    } catch (err) {
+      throw this.mapError(err);
+    }
+
+    return this.findOne(id);
+  }
+
   async assign(id: string, dto: AssignWorkersDto) {
     const box = await this.boxes.findByPk(id);
     if (!box) throw new NotFoundException('Caja no encontrada');
@@ -164,6 +196,64 @@ export class PettyCashService {
       ],
       order: [['created_at', 'DESC']],
     });
+  }
+
+  async remove(id: string, user: AuthUser) {
+    if (user.role !== 'admin') {
+      throw new ForbiddenException('Solo un admin puede eliminar cajas');
+    }
+
+    const box = await this.boxes.findByPk(id);
+    if (!box) throw new NotFoundException('Caja no encontrada');
+
+    await this.sequelize.transaction(async (t) => {
+      // 1. Get all invoices for this box (we need their image paths & IDs)
+      const boxInvoices = await this.invoices.findAll({
+        where: { box_id: id },
+        attributes: ['id', 'image_url'],
+        transaction: t,
+      });
+
+      const invoiceIds = boxInvoices.map((inv) => inv.id);
+
+      // 2. Delete approvals linked to those invoices
+      if (invoiceIds.length > 0) {
+        await this.approvals.destroy({
+          where: { invoice_id: invoiceIds },
+          transaction: t,
+        });
+      }
+
+      // 3. Delete the invoices
+      await this.invoices.destroy({
+        where: { box_id: id },
+        transaction: t,
+      });
+
+      // 4. Delete box assignments
+      await this.assignments.destroy({
+        where: { box_id: id },
+        transaction: t,
+      });
+
+      // 5. Delete the box itself
+      await box.destroy({ transaction: t });
+
+      // 6. Delete files from storage (best-effort, after DB commit is guaranteed)
+      for (const inv of boxInvoices) {
+        if (inv.image_url) {
+          try {
+            const fs = await import('fs');
+            const abs = this.storage.absolute(inv.image_url);
+            await fs.promises.unlink(abs);
+          } catch (err) {
+            this.logger.warn(`No se pudo eliminar archivo ${inv.image_url}: ${err}`);
+          }
+        }
+      }
+    });
+
+    return { id, deleted: true };
   }
 
   private validateTypeVsWorkers(type: 'individual' | 'shared', worker_ids: string[]) {

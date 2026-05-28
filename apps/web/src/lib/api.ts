@@ -172,12 +172,24 @@ export interface Movement {
   approver: { id: string; name: string };
 }
 
+export interface UpdateBoxInput {
+  code?: string;
+  name?: string;
+  initial_amount?: number;
+  current_balance?: number;
+}
+
 export const pettyCash = {
   list: () => request<PettyCashBox[]>('/petty-cash'),
   get: (id: string) => request<PettyCashBox>(`/petty-cash/${id}`),
   create: (input: CreateBoxInput) =>
     request<PettyCashBox>('/petty-cash', {
       method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  update: (id: string, input: UpdateBoxInput) =>
+    request<PettyCashBox>(`/petty-cash/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(input),
     }),
   close: (id: string) =>
@@ -191,6 +203,10 @@ export const pettyCash = {
       body: JSON.stringify({ worker_ids, primary_worker_id }),
     }),
   movements: (id: string) => request<Movement[]>(`/petty-cash/${id}/movements`),
+  remove: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/petty-cash/${id}`, {
+      method: 'DELETE',
+    }),
 };
 
 // ============ Invoices ============

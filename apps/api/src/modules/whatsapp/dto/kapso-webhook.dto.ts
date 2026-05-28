@@ -5,7 +5,34 @@ import {
   IsUrl,
   Matches,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+/**
+ * Sub-DTO para interactive.button_reply que viene en el webhook
+ * cuando el usuario presiona un botón interactivo.
+ */
+export class ButtonReplyDto {
+  @IsString()
+  id!: string;
+
+  @IsString()
+  title!: string;
+}
+
+/**
+ * Sub-DTO para el campo interactive del webhook.
+ */
+export class InteractiveDto {
+  @IsIn(['button_reply', 'list_reply'])
+  type!: 'button_reply' | 'list_reply';
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ButtonReplyDto)
+  button_reply?: ButtonReplyDto;
+}
 
 /**
  * Payload genérico de un mensaje entrante desde Kapso. La forma real
@@ -24,8 +51,8 @@ export class KapsoWebhookDto {
   })
   from!: string;
 
-  @IsIn(['text', 'image'])
-  type!: 'text' | 'image';
+  @IsIn(['text', 'image', 'interactive'])
+  type!: 'text' | 'image' | 'interactive';
 
   @IsOptional()
   @IsString()
@@ -45,6 +72,12 @@ export class KapsoWebhookDto {
   @IsOptional()
   @IsString()
   media_mime_type?: string;
+
+  /** Datos de interactive (button_reply o list_reply) */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InteractiveDto)
+  interactive?: InteractiveDto;
 
   @IsOptional()
   timestamp?: string | number;

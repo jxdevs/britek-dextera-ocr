@@ -21,6 +21,7 @@ export default () => ({
     webhookSecret: process.env.KAPSO_WEBHOOK_SECRET ?? '',
     apiKey: process.env.KAPSO_API_KEY ?? '',
     apiUrl: process.env.KAPSO_API_URL ?? 'https://api.kapso.ai/v1',
+    phoneNumberId: process.env.KAPSO_PHONE_NUMBER_ID ?? '',
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY ?? '',

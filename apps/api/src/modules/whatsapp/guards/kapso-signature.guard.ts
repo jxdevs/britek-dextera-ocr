@@ -17,15 +17,19 @@ export class KapsoSignatureGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const secret = this.config.get<string>('kapso.webhookSecret');
-    if (!secret) {
+    if (!secret || secret.trim() === '') {
       this.logger.warn('KAPSO_WEBHOOK_SECRET vacío — saltando validación de firma.');
       return true;
     }
 
     const req = context.switchToHttp().getRequest<Request & { rawBody?: Buffer }>();
-    const header = (req.headers['x-kapso-signature'] as string | undefined) ?? '';
+    // Kapso v2 usa 'x-webhook-signature', legacy usa 'x-kapso-signature'
+    const header =
+      (req.headers['x-webhook-signature'] as string | undefined) ??
+      (req.headers['x-kapso-signature'] as string | undefined) ??
+      '';
     const provided = header.replace(/^sha256=/i, '').trim();
-    if (!provided) throw new UnauthorizedException('Falta header X-Kapso-Signature');
+    if (!provided) throw new UnauthorizedException('Falta header X-Webhook-Signature');
     if (!req.rawBody) throw new UnauthorizedException('No se pudo capturar el cuerpo crudo');
 
     const expected = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
