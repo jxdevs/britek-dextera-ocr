@@ -1,9 +1,9 @@
-import { ChevronRight, Clock, Loader2, Plus, Users, User } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Clock, Loader2, Plus, Users, User } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { pettyCash, type PettyCashBox } from '../lib/api';
-import { cn, formatMoney, getBoxDeadlineInfo } from '../lib/utils';
+import { cn, formatMoney, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
 export default function CajasPage() {
   const [items, setItems] = useState<PettyCashBox[]>([]);
@@ -33,7 +33,7 @@ export default function CajasPage() {
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Cajas menores</h2>
           <p className="text-sm text-slate-600">
-            Individual: anticipo de un trabajador. Compartida: bolsa común para varios.
+            Individual: anticipo de un residente. Compartida: bolsa común para varios.
           </p>
         </div>
         <button
@@ -87,21 +87,28 @@ export default function CajasPage() {
 function BoxCard({ box }: { box: PettyCashBox }) {
   const initial = parseFloat(box.initial_amount);
   const current = parseFloat(box.current_balance);
-  const pct = initial > 0 ? (current / initial) * 100 : 0;
+  const consumedPct = initial > 0 ? ((initial - current) / initial) * 100 : 0;
 
   const primary = box.workers.find((w) => w.BoxAssignment.is_primary);
   const others = box.workers.filter((w) => !w.BoxAssignment.is_primary);
 
   const deadline = box.status === 'open' ? getBoxDeadlineInfo(box.opened_at) : null;
+  const consumption = box.status === 'open' ? getBoxConsumptionAlert(box.initial_amount, box.current_balance) : null;
 
   return (
     <Link
       to={`/cajas/${box.id}`}
       className={cn(
-        'block bg-white border rounded-lg hover:shadow-sm transition-all',
-        deadline?.severity === 'overdue'
+        'block bg-white border rounded-lg hover:shadow-sm transition-all overflow-hidden',
+        consumption?.severity === 'depleted'
           ? 'border-rose-300 hover:border-rose-400'
-          : 'border-slate-200 hover:border-slate-300',
+          : consumption?.severity === 'critical'
+            ? 'border-orange-300 hover:border-orange-400'
+            : consumption?.severity === 'warning'
+              ? 'border-amber-300 hover:border-amber-400'
+              : deadline?.severity === 'overdue'
+                ? 'border-rose-300 hover:border-rose-400'
+                : 'border-slate-200 hover:border-slate-300',
       )}
     >
       <div className="px-5 py-4 flex items-center gap-6">
@@ -137,7 +144,7 @@ function BoxCard({ box }: { box: PettyCashBox }) {
                 {others.length > 0 && ` +${others.length} más`}
               </>
             ) : (
-              `${box.workers.length} trabajador(es)`
+              `${box.workers.length} residente(s)`
             )}
           </p>
         </div>
@@ -146,15 +153,15 @@ function BoxCard({ box }: { box: PettyCashBox }) {
             {formatMoney(current)}
           </p>
           <p className="text-xs text-slate-500 tabular-nums">
-            de {formatMoney(initial)} ({pct.toFixed(0)}%)
+            Legalizado {consumedPct.toFixed(0)}% · de {formatMoney(initial)}
           </p>
           <div className="mt-1 w-32 bg-slate-100 rounded-full h-1 overflow-hidden">
             <div
               className={cn(
                 'h-full transition-all',
-                pct > 50 ? 'bg-emerald-500' : pct > 20 ? 'bg-amber-500' : 'bg-rose-500',
+                consumedPct >= 75 ? 'bg-rose-500' : consumedPct >= 50 ? 'bg-amber-500' : 'bg-sky-500',
               )}
-              style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+              style={{ width: `${Math.max(0, Math.min(100, consumedPct))}%` }}
             />
           </div>
         </div>
@@ -175,6 +182,27 @@ function BoxCard({ box }: { box: PettyCashBox }) {
         )}
         <ChevronRight className="size-4 text-slate-400" />
       </div>
+      {/* Alerta compacta de consumo */}
+      {consumption && (
+        <div className={cn(
+          'flex items-center gap-2 px-5 py-1.5 text-[11px] font-medium border-t',
+          consumption.severity === 'depleted'
+            ? 'bg-rose-50 text-rose-700 border-rose-200'
+            : consumption.severity === 'critical'
+              ? 'bg-orange-50 text-orange-700 border-orange-200'
+              : 'bg-amber-50 text-amber-700 border-amber-200',
+        )}>
+          <AlertTriangle className="size-3 shrink-0" />
+          <span>
+            {consumption.severity === 'depleted'
+              ? 'Fondos casi agotados — prepare legalización'
+              : consumption.severity === 'critical'
+                ? 'Iniciar preparación de legalización'
+                : 'Revisar caja y preparar legalización'}
+          </span>
+          <span className="ml-auto tabular-nums">{consumption.remainingPct.toFixed(0)}% restante</span>
+        </div>
+      )}
     </Link>
   );
 }

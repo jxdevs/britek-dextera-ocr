@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { cn, formatMoney, getBoxDeadlineInfo } from '../lib/utils';
+import { cn, formatMoney, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
 export default function CajaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -77,9 +77,10 @@ export default function CajaDetailPage() {
   }
 
   const initial = parseFloat(box.initial_amount);
-  const current = parseFloat(box.current_balance);
-  const used = initial - current;
-  const pct = initial > 0 ? (current / initial) * 100 : 0;
+  const legalized = movements.reduce((sum, m) => sum + parseFloat(m.invoice.total), 0);
+  const pending = initial - legalized;
+  const legalizedPct = initial > 0 ? (legalized / initial) * 100 : 0;
+  const pendingPct = initial > 0 ? (pending / initial) * 100 : 0;
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -114,6 +115,13 @@ export default function CajaDetailPage() {
             {box.code} · abierta el {new Date(box.opened_at).toLocaleDateString('es-CO')}
             {box.closed_at && ` · cerrada el ${new Date(box.closed_at).toLocaleDateString('es-CO')}`}
           </p>
+          {(box.project_name || box.cost_center) && (
+            <p className="text-sm text-slate-500 mt-0.5">
+              {box.project_name && <><span className="font-medium text-slate-700">Proyecto:</span> {box.project_name}</>}
+              {box.project_name && box.cost_center && ' · '}
+              {box.cost_center && <><span className="font-medium text-slate-700">Centro de costo:</span> {box.cost_center}</>}
+            </p>
+          )}
         </div>
         {canEdit && box.status === 'open' && (
           <div className="flex gap-2">
@@ -131,7 +139,7 @@ export default function CajaDetailPage() {
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 hover:bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
             >
               <Pencil className="size-4" />
-              Asignar trabajadores
+              Asignar residentes
             </button> */}
             <button
               type="button"
@@ -190,15 +198,37 @@ export default function CajaDetailPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <Card label="Saldo actual" value={formatMoney(current)} muted={`de ${formatMoney(initial)}`} />
-        <Card label="Consumido" value={formatMoney(used)} muted={`${(100 - pct).toFixed(1)}% del monto`} />
+      <div className="grid grid-cols-4 gap-4">
+        <Card label="Monto inicial" value={formatMoney(initial)} muted="asignado a la caja" />
+        <Card label="Legalizado" value={formatMoney(legalized)} muted={`${legalizedPct.toFixed(1)}% del monto`} />
+        <Card label="Pendiente por legalizar" value={formatMoney(pending)} muted={`${pendingPct.toFixed(1)}% restante`} />
         <Card
           label="Movimientos aprobados"
           value={String(movements.length)}
           muted="facturas legalizadas"
         />
       </div>
+
+      {/* Alerta de consumo (75%–80%+) */}
+      {box.status === 'open' && (() => {
+        const consumption = getBoxConsumptionAlert(box.initial_amount, box.current_balance);
+        if (!consumption) return null;
+        return (
+          <div className={cn('flex items-center gap-3 rounded-lg border px-4 py-3', consumption.bannerClasses)}>
+            <AlertTriangle className="size-5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">{consumption.bannerLabel}</p>
+              <p className="text-xs mt-0.5 opacity-75">
+                Consumido: {formatMoney(parseFloat(box.initial_amount) - parseFloat(box.current_balance))} de {formatMoney(parseFloat(box.initial_amount))}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={cn('size-2.5 rounded-full', consumption.dotColor)} />
+              <span className="text-xs font-semibold uppercase tracking-wide">{consumption.badgeLabel}</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Semáforo de plazo — solo para cajas abiertas */}
       {box.status === 'open' && (() => {
@@ -224,11 +254,11 @@ export default function CajaDetailPage() {
         );
       })()}
 
-      {/* Sección de trabajadores asignados — oculta temporalmente
+      {/* Sección de residentes asignados — oculta temporalmente
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200">
           <h3 className="text-sm font-semibold text-slate-900">
-            Trabajadores asignados ({box.workers.length})
+            Residentes asignados ({box.workers.length})
           </h3>
         </div>
         <div className="divide-y divide-slate-100">
@@ -279,19 +309,24 @@ export default function CajaDetailPage() {
                 <th className="text-right px-4 py-2 font-medium">Monto</th>
                 <th className="text-left px-4 py-2 font-medium">Aprobador</th>
                 <th className="text-center px-4 py-2 font-medium">Soporte</th>
+                {canEdit && <th className="text-center px-4 py-2 font-medium">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {movements.map((m) => (
                 <tr
                   key={m.id}
-                  className="hover:bg-slate-50 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/facturas/${m.invoice.id}`)}
+                  className="hover:bg-slate-50 transition-colors"
                 >
                   <td className="px-4 py-2 text-slate-700 tabular-nums">
                     {new Date(m.created_at).toLocaleDateString('es-CO')}
                   </td>
-                  <td className="px-4 py-2 text-slate-900">{m.invoice.vendor_name ?? '—'}</td>
+                  <td
+                    className="px-4 py-2 text-slate-900 cursor-pointer hover:text-sky-700"
+                    onClick={() => navigate(`/facturas/${m.invoice.id}`)}
+                  >
+                    {m.invoice.vendor_name ?? '—'}
+                  </td>
                   <td className="px-4 py-2 text-slate-700 tabular-nums">
                     {m.invoice.invoice_number ?? '—'}
                   </td>
@@ -300,23 +335,58 @@ export default function CajaDetailPage() {
                   </td>
                   <td className="px-4 py-2 text-slate-700">{m.approver.name}</td>
                   <td className="px-4 py-2 text-center">
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900">
+                    <span
+                      className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 cursor-pointer"
+                      onClick={() => navigate(`/facturas/${m.invoice.id}`)}
+                    >
                       <Eye className="size-3.5" />
                       Ver
                     </span>
                   </td>
+                  {canEdit && (
+                    <td className="px-4 py-2 text-center">
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm(`¿Eliminar este movimiento de ${m.invoice.vendor_name ?? 'Sin proveedor'} por ${formatMoney(parseFloat(m.invoice.total))}? Se restaurará el saldo a la caja y la factura volverá a estado pendiente.`)) return;
+                          try {
+                            await pettyCash.removeMovement(box.id, m.id);
+                            await load();
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : 'Error al eliminar movimiento');
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-800"
+                        title="Eliminar movimiento"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
+            <tfoot className="border-t-2 border-slate-200 bg-slate-50">
+              <tr>
+                <td colSpan={3} className="px-4 py-2 text-sm font-semibold text-slate-900 text-right">
+                  Total
+                </td>
+                <td className="px-4 py-2 text-right text-sm font-bold text-slate-900 tabular-nums">
+                  {formatMoney(movements.reduce((sum, m) => sum + parseFloat(m.invoice.total), 0))}
+                </td>
+                <td colSpan={canEdit ? 3 : 2} />
+              </tr>
+            </tfoot>
           </table>
         )}
       </div>
 
-      {/* Modal de reasignar trabajadores — oculto temporalmente
+      {/* Modal de reasignar residentes — oculto temporalmente
       {editing && (
         <BoxFormModal
           mode="reassign"
-          title="Reasignar trabajadores"
+          title="Reasignar residentes"
           lockedType={box.type}
           initial={{
             type: box.type,
@@ -358,8 +428,9 @@ function EditBoxModal({
 }) {
   const [code, setCode] = useState(box.code);
   const [name, setName] = useState(box.name);
+  const [projectName, setProjectName] = useState(box.project_name ?? '');
+  const [costCenter, setCostCenter] = useState(box.cost_center ?? '');
   const [initialAmount, setInitialAmount] = useState(box.initial_amount);
-  const [currentBalance, setCurrentBalance] = useState(box.current_balance);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -371,10 +442,10 @@ function EditBoxModal({
       const input: UpdateBoxInput = {};
       if (code !== box.code) input.code = code;
       if (name !== box.name) input.name = name;
+      if (projectName !== (box.project_name ?? '')) input.project_name = projectName;
+      if (costCenter !== (box.cost_center ?? '')) input.cost_center = costCenter;
       if (initialAmount !== box.initial_amount)
         input.initial_amount = parseFloat(initialAmount);
-      if (currentBalance !== box.current_balance)
-        input.current_balance = parseFloat(currentBalance);
 
       await pettyCash.update(box.id, input);
       onSaved();
@@ -425,33 +496,40 @@ function EditBoxModal({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Monto inicial
-            </label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Proyecto</label>
             <input
-              type="number"
-              value={initialAmount}
-              onChange={(e) => setInitialAmount(e.target.value)}
+              type="text"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              step="0.01"
-              min="0"
-              required
+              placeholder="Nombre del proyecto"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Saldo actual
-            </label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Centro de costo</label>
             <input
-              type="number"
-              value={currentBalance}
-              onChange={(e) => setCurrentBalance(e.target.value)}
+              type="text"
+              value={costCenter}
+              onChange={(e) => setCostCenter(e.target.value)}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-              step="0.01"
-              min="0"
-              required
+              placeholder="Ej: CC-001"
             />
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Monto inicial
+          </label>
+          <input
+            type="number"
+            value={initialAmount}
+            onChange={(e) => setInitialAmount(e.target.value)}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            step="0.01"
+            min="0"
+            required
+          />
         </div>
 
         <div className="flex justify-end gap-2 pt-2">

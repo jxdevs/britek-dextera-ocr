@@ -45,7 +45,7 @@ async function seed() {
           },
           {
             document_number: '333333',
-            name: 'Ana Trabajadora',
+            name: 'Ana Residente',
             email: null,
             phone: '+573000000003',
             role: 'worker',
@@ -53,7 +53,7 @@ async function seed() {
           },
           {
             document_number: '444444',
-            name: 'Juan Trabajador',
+            name: 'Juan Residente',
             email: null,
             phone: '+573000000004',
             role: 'worker',
@@ -61,7 +61,7 @@ async function seed() {
           },
           {
             document_number: '555555',
-            name: 'Sofía Trabajadora',
+            name: 'Sofía Residente',
             email: null,
             phone: '+573000000005',
             role: 'worker',

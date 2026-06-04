@@ -41,7 +41,7 @@ export class InvoicesService {
     }
 
     const worker = await this.workers.findByPk(workerId);
-    if (!worker) throw new NotFoundException('Trabajador no encontrado');
+    if (!worker) throw new NotFoundException('Residente no encontrado');
 
     const imageUrl = await this.storage.put(file.buffer, file.originalname);
 
@@ -60,12 +60,20 @@ export class InvoicesService {
 
     const data = extraction.extracted as Record<string, unknown>;
 
+    // Regla de negocio: sin NIT el nivel de confianza máximo es 10%
+    let confidenceScore =
+      typeof data.confidence_score === 'number' ? data.confidence_score : null;
+    const vendorNit = toStringOrNull(data.vendor_nit);
+    if (!vendorNit && confidenceScore !== null) {
+      confidenceScore = Math.min(confidenceScore, 0.10);
+    }
+
     const invoice = await this.invoices.create({
       worker_id: workerId,
       box_id: null,
       image_url: imageUrl,
       status: 'pending',
-      vendor_nit: toStringOrNull(data.vendor_nit),
+      vendor_nit: vendorNit,
       vendor_name: toStringOrNull(data.vendor_name),
       invoice_number: toStringOrNull(data.invoice_number),
       invoice_date: toStringOrNull(data.invoice_date),
@@ -74,8 +82,7 @@ export class InvoicesService {
       total: toDecimalOrNull(data.total) ?? '0',
       currency: toStringOrNull(data.currency) ?? 'COP',
       extracted_data: extraction.extracted,
-      confidence_score:
-        typeof data.confidence_score === 'number' ? data.confidence_score : null,
+      confidence_score: confidenceScore,
       submitted_at: new Date(),
     });
 

@@ -91,7 +91,7 @@ export class WhatsappService {
       if (!worker) {
         await this.kapso.sendText(
           phone,
-          'No estás registrado en Britek+Dextera. Contacta al administrador.',
+          'No estás registrado en Britek. Contacta al administrador.',
         );
         await event.update({ processed: true });
         return { ok: true, unknown_worker: true };
@@ -111,7 +111,7 @@ export class WhatsappService {
       const message = err instanceof Error ? err.message : 'Error procesando mensaje';
       this.logger.error(`Fallo en mensaje ${payload.message_id}: ${message}`, err as Error);
       await event.update({ processed: true, error: message });
-      // Avisamos al trabajador para que reintente.
+      // Avisamos al residente para que reintente.
       try {
         await this.kapso.sendText(
           phone,
@@ -156,7 +156,7 @@ export class WhatsappService {
         { id: 'menu_factura', title: '📸 Subir factura' },
         { id: 'menu_saldo', title: '💰 Ver saldo' },
       ],
-      'Britek+Dextera · Caja menor',
+      'Britek · Caja menor',
     );
   }
 

@@ -139,6 +139,8 @@ export interface PettyCashBox {
   status: BoxStatus;
   initial_amount: string;
   current_balance: string;
+  project_name: string | null;
+  cost_center: string | null;
   opened_at: string;
   closed_at: string | null;
   created_at: string;
@@ -151,6 +153,8 @@ export interface CreateBoxInput {
   name: string;
   type: BoxType;
   initial_amount: number;
+  project_name: string;
+  cost_center: string;
   worker_ids: string[];
   primary_worker_id?: string;
 }
@@ -177,6 +181,8 @@ export interface UpdateBoxInput {
   name?: string;
   initial_amount?: number;
   current_balance?: number;
+  project_name?: string;
+  cost_center?: string;
 }
 
 export const pettyCash = {
@@ -203,6 +209,10 @@ export const pettyCash = {
       body: JSON.stringify({ worker_ids, primary_worker_id }),
     }),
   movements: (id: string) => request<Movement[]>(`/petty-cash/${id}/movements`),
+  removeMovement: (boxId: string, approvalId: string) =>
+    request<{ id: string; deleted: boolean }>(`/petty-cash/${boxId}/movements/${approvalId}`, {
+      method: 'DELETE',
+    }),
   remove: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/petty-cash/${id}`, {
       method: 'DELETE',

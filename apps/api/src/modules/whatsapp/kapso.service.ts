@@ -13,7 +13,7 @@ export class KapsoService {
   constructor(private readonly config: ConfigService) {}
 
   /**
-   * Envía un mensaje de texto al trabajador.
+   * Envía un mensaje de texto al residente.
    */
   async sendText(toPhone: string, body: string): Promise<void> {
     const apiKey = this.config.get<string>('kapso.apiKey');

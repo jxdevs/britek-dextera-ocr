@@ -32,10 +32,15 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
   );
   const [selected, setSelected] = useState<string[]>(initial?.worker_ids ?? []);
   const [primary, setPrimary] = useState<string | undefined>(initial?.primary_worker_id);
+  const [projectName, setProjectName] = useState(initial?.project_name ?? '');
+  const [costCenter, setCostCenter] = useState(initial?.cost_center ?? '');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyWorkers, setBusyWorkers] = useState<Map<string, string>>(new Map());
+
+  const MAX_AMOUNT = 1_000_000;
+  const amountExceedsLimit = parseFloat(amount || '0') > MAX_AMOUNT;
 
   useEffect(() => {
     const loadData = async () => {
@@ -56,7 +61,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
         }
         setBusyWorkers(busy);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'No se pudieron cargar trabajadores');
+        setError(err instanceof Error ? err.message : 'No se pudieron cargar residentes');
       } finally {
         setLoadingWorkers(false);
       }
@@ -79,11 +84,11 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
   };
 
   const valid = useMemo(() => {
-    if (mode === 'create' && (!code.trim() || !name.trim() || !amount)) return false;
+    if (mode === 'create' && (!code.trim() || !name.trim() || !amount || !projectName.trim() || !costCenter.trim())) return false;
     if (selected.length === 0) return false;
     if (type === 'individual' && selected.length !== 1) return false;
     return true;
-  }, [mode, code, name, amount, selected, type]);
+  }, [mode, code, name, amount, projectName, costCenter, selected, type]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -95,6 +100,8 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
         name: name.trim(),
         type,
         initial_amount: parseFloat(amount || '0'),
+        project_name: projectName.trim(),
+        cost_center: costCenter.trim(),
         worker_ids: selected,
         primary_worker_id: type === 'shared' ? primary : selected[0],
       });
@@ -134,12 +141,23 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                     type="number"
                     step="0.01"
                     min="0"
+                    max={MAX_AMOUNT}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     required
                     placeholder="1000000"
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className={cn(
+                      'mt-1 w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2',
+                      amountExceedsLimit
+                        ? 'border-rose-400 focus:ring-rose-500 text-rose-700'
+                        : 'border-slate-300 focus:ring-slate-900',
+                    )}
                   />
+                  {amountExceedsLimit && (
+                    <p className="mt-1 text-xs text-rose-600 font-medium">
+                      El monto no puede superar $1.000.000
+                    </p>
+                  )}
                 </label>
               </div>
               <label className="block">
@@ -151,6 +169,28 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">Proyecto</span>
+                  <input
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    required
+                    placeholder="Nombre del proyecto"
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">Centro de costo</span>
+                  <input
+                    value={costCenter}
+                    onChange={(e) => setCostCenter(e.target.value)}
+                    required
+                    placeholder="Ej: CC-001"
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                </label>
+              </div>
               <div>
                 <span className="text-xs font-medium text-slate-600">Tipo</span>
                 <div className="mt-1 grid grid-cols-2 gap-2">
@@ -162,7 +202,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                   >
                     <p className="font-medium">Individual</p>
                     <p className="text-xs text-slate-300">
-                      1 trabajador con su propio anticipo
+                      1 residente con su propio anticipo
                     </p>
                   </button>
 
@@ -189,7 +229,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                         type === 'shared' ? 'text-slate-300' : 'text-slate-500',
                       )}
                     >
-                      Varios trabajadores descuentan
+                      Varios residentes descuentan
                     </p>
                   </button>
                   */}
@@ -201,7 +241,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
           <div>
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-600">
-                Trabajadores asignados ({selected.length}
+                Residentes asignados ({selected.length}
                 {type === 'individual' ? '/1' : ''})
               </span>
               {/* TODO: Fase 2 - Caja compartida
@@ -245,7 +285,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                         <p className="text-sm font-medium text-slate-900 truncate">
                           {w.name}
                           <span className="ml-1.5 text-xs text-slate-500 font-normal">
-                            (Trabajador)
+                            (Residente)
                           </span>
                         </p>
                         {isDisabled ? (
@@ -296,7 +336,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
             </button>
             <button
               type="submit"
-              disabled={!valid || saving}
+              disabled={!valid || saving || amountExceedsLimit}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-md"
             >
               {saving && <Loader2 className="size-3.5 animate-spin" />}

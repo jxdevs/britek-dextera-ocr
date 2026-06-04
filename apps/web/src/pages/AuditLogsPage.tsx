@@ -40,7 +40,7 @@ const ACTION_CONFIG: Record<
 
 const ENTITY_LABELS: Record<string, string> = {
   session: 'Sesión',
-  worker: 'Trabajador',
+  worker: 'Residente',
   petty_cash_box: 'Caja menor',
   invoice: 'Factura',
 };

@@ -75,6 +75,11 @@ export class PettyCashService {
         'primary_worker_id debe estar dentro de worker_ids',
       );
     }
+    if (dto.initial_amount > 1_000_000) {
+      throw new BadRequestException(
+        'El monto inicial no puede superar $1.000.000',
+      );
+    }
     await this.assertWorkersExist(dto.worker_ids);
     await this.assertNoOpenBoxForWorkers(dto.worker_ids);
 
@@ -87,6 +92,8 @@ export class PettyCashService {
             type: dto.type,
             initial_amount: dto.initial_amount.toFixed(2),
             current_balance: dto.initial_amount.toFixed(2),
+            project_name: dto.project_name,
+            cost_center: dto.cost_center,
             opened_at: new Date(),
             status: 'open',
             created_by: user.id,
@@ -153,8 +160,22 @@ export class PettyCashService {
     const updates: Record<string, unknown> = {};
     if (dto.code !== undefined) updates.code = dto.code;
     if (dto.name !== undefined) updates.name = dto.name;
-    if (dto.initial_amount !== undefined)
+    if (dto.project_name !== undefined) updates.project_name = dto.project_name;
+    if (dto.cost_center !== undefined) updates.cost_center = dto.cost_center;
+
+    if (dto.initial_amount !== undefined) {
       updates.initial_amount = dto.initial_amount.toFixed(2);
+
+      // Auto-recalcular current_balance para preservar el monto consumido
+      if (dto.current_balance === undefined) {
+        const oldInitial = parseFloat(box.initial_amount);
+        const oldBalance = parseFloat(box.current_balance);
+        const consumed = oldInitial - oldBalance; // monto ya legalizado
+        const newBalance = Math.max(0, dto.initial_amount - consumed);
+        updates.current_balance = newBalance.toFixed(2);
+      }
+    }
+
     if (dto.current_balance !== undefined)
       updates.current_balance = dto.current_balance.toFixed(2);
 
@@ -239,6 +260,73 @@ export class PettyCashService {
     });
   }
 
+  /**
+   * Reverts an approved movement: deletes the approval, restores the box balance,
+   * and sets the invoice back to pending. Admin only.
+   */
+  async removeMovement(boxId: string, approvalId: string, user: AuthUser) {
+    if (user.role !== 'admin') {
+      throw new ForbiddenException('Solo un admin puede eliminar movimientos');
+    }
+
+    const box = await this.boxes.findByPk(boxId);
+    if (!box) throw new NotFoundException('Caja no encontrada');
+
+    const approval = await this.approvals.findByPk(approvalId, {
+      include: [{ model: Invoice }],
+    });
+    if (!approval) throw new NotFoundException('Movimiento no encontrado');
+
+    const invoice = approval.invoice;
+    if (!invoice || invoice.box_id !== boxId) {
+      throw new BadRequestException('El movimiento no pertenece a esta caja');
+    }
+
+    const invoiceTotal = parseFloat(invoice.total);
+
+    await this.sequelize.transaction(async (t) => {
+      // 1. Restore box balance
+      const currentBalance = parseFloat(box.current_balance);
+      const restoredBalance = (currentBalance + invoiceTotal).toFixed(2);
+      await box.update({ current_balance: restoredBalance }, { transaction: t });
+
+      // 2. Reset invoice: remove box assignment and set back to pending
+      await invoice.update(
+        { box_id: null, status: 'pending' },
+        { transaction: t },
+      );
+
+      // 3. Delete the approval record
+      await approval.destroy({ transaction: t });
+
+      // 4. Audit log
+      this.audit.log({
+        user,
+        action: 'delete',
+        entity: 'approval',
+        entityId: approvalId,
+        entityLabel: `Movimiento eliminado: ${invoice.vendor_name ?? 'Sin proveedor'} - $${invoiceTotal.toFixed(2)}`,
+        before: {
+          status: 'approved',
+          box_id: boxId,
+          total: invoice.total,
+          box_balance: box.current_balance,
+        },
+        after: {
+          status: 'pending',
+          box_id: null,
+          restored_balance: restoredBalance,
+        },
+      });
+
+      this.logger.warn(
+        `Admin ${user.name} eliminó movimiento ${approvalId} de caja ${box.code}. Saldo restaurado: ${box.current_balance} → ${restoredBalance}`,
+      );
+    });
+
+    return { id: approvalId, deleted: true };
+  }
+
   async remove(id: string, user: AuthUser) {
     if (user.role !== 'admin') {
       throw new ForbiddenException('Solo un admin puede eliminar cajas');
@@ -309,7 +397,7 @@ export class PettyCashService {
   private validateTypeVsWorkers(type: 'individual' | 'shared', worker_ids: string[]) {
     if (type === 'individual' && worker_ids.length !== 1) {
       throw new BadRequestException(
-        'Una caja individual debe tener exactamente 1 trabajador asignado',
+        'Una caja individual debe tener exactamente 1 residente asignado',
       );
     }
   }
@@ -317,7 +405,7 @@ export class PettyCashService {
   private async assertWorkersExist(ids: string[]) {
     const count = await this.workers.count({ where: { id: ids } });
     if (count !== ids.length) {
-      throw new BadRequestException('Alguno de los trabajadores no existe');
+      throw new BadRequestException('Alguno de los residentes no existe');
     }
   }
 
@@ -343,7 +431,7 @@ export class PettyCashService {
       const uniqueNames = [...new Set(workerNames)].join(', ');
       const boxCode = openBoxes[0].code;
       throw new ConflictException(
-        `El trabajador ${uniqueNames} ya tiene una caja abierta (${boxCode}). Debe cerrarla antes de abrir otra.`,
+        `El residente ${uniqueNames} ya tiene una caja abierta (${boxCode}). Debe cerrarla antes de abrir otra.`,
       );
     }
   }

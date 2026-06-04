@@ -40,7 +40,7 @@ export class WorkersService {
 
   async findOne(id: string) {
     const w = await this.workers.findByPk(id, { attributes: [...PUBLIC_ATTRS] });
-    if (!w) throw new NotFoundException('Trabajador no encontrado');
+    if (!w) throw new NotFoundException('Residente no encontrado');
     return w;
   }
 
@@ -80,7 +80,7 @@ export class WorkersService {
 
   async update(id: string, dto: UpdateWorkerDto, user: AuthUser) {
     const worker = await this.workers.findByPk(id);
-    if (!worker) throw new NotFoundException('Trabajador no encontrado');
+    if (!worker) throw new NotFoundException('Residente no encontrado');
 
     const beforeData = AuditService.sanitize(worker.toJSON());
 
@@ -121,7 +121,7 @@ export class WorkersService {
 
   async remove(id: string, user: AuthUser) {
     const worker = await this.workers.findByPk(id);
-    if (!worker) throw new NotFoundException('Trabajador no encontrado');
+    if (!worker) throw new NotFoundException('Residente no encontrado');
 
     const beforeData = AuditService.sanitize(worker.toJSON());
 
@@ -142,7 +142,7 @@ export class WorkersService {
   private mapError(err: unknown) {
     if (err instanceof UniqueConstraintError) {
       return new ConflictException(
-        `Ya existe un trabajador con ${err.errors.map((e) => e.path).join(', ')}`,
+        `Ya existe un residente con ${err.errors.map((e) => e.path).join(', ')}`,
       );
     }
     return err as Error;

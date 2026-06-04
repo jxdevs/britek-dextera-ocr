@@ -80,8 +80,9 @@ Recibirás una imagen. Tu tarea:
    - Si un campo no es legible o no aparece, déjalo en null en vez de inventar.
    - "items" puede ser una lista vacía si no se distinguen líneas.
 3. Calibra confidence_score honestamente:
-   - >= 0.85 → todos los campos clave legibles y consistentes (subtotal + iva ≈ total).
-   - 0.6 – 0.85 → algunos campos dudosos o falta uno secundario.
+   - Si falta el NIT (vendor_nit es null), el confidence_score NUNCA puede superar 0.10. El NIT es primordial.
+   - >= 0.85 → todos los campos clave legibles y consistentes (subtotal + iva ≈ total), NIT presente.
+   - 0.6 – 0.85 → algunos campos dudosos o falta uno secundario, NIT presente.
    - < 0.6 → factura parcial, borrosa, o con campos clave ilegibles.
 
 Responde SOLO con el JSON estructurado.`;

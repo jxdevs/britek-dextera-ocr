@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   MinLength,
 } from 'class-validator';
@@ -26,7 +27,16 @@ export class CreateBoxDto {
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
+  @Max(1_000_000, { message: 'El monto inicial no puede superar $1.000.000' })
   initial_amount!: number;
+
+  @IsString()
+  @MinLength(1)
+  project_name!: string;
+
+  @IsString()
+  @MinLength(1)
+  cost_center!: string;
 
   @IsArray()
   @ArrayMinSize(1)

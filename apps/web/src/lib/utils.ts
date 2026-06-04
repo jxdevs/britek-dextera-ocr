@@ -89,3 +89,74 @@ export function getBoxDeadlineInfo(openedAt: string): BoxDeadlineInfo {
     bannerClasses: 'bg-rose-50 border-rose-200 text-rose-800',
   };
 }
+
+// ============ Box consumption alerts ============
+
+export type ConsumptionSeverity = 'warning' | 'critical' | 'depleted';
+
+export interface BoxConsumptionAlert {
+  /** Percentage consumed (0-100) */
+  consumedPct: number;
+  /** Percentage remaining (0-100) */
+  remainingPct: number;
+  severity: ConsumptionSeverity;
+  /** Short label for badges */
+  badgeLabel: string;
+  /** Descriptive message for banners */
+  bannerLabel: string;
+  dotColor: string;
+  bannerClasses: string;
+}
+
+/**
+ * Returns an alert if the box consumption is >= 75% of the initial amount.
+ * Returns null if consumption is below the threshold.
+ */
+export function getBoxConsumptionAlert(
+  initialAmount: string,
+  currentBalance: string,
+): BoxConsumptionAlert | null {
+  const initial = parseFloat(initialAmount);
+  const current = parseFloat(currentBalance);
+  if (!Number.isFinite(initial) || initial <= 0) return null;
+
+  const consumed = initial - current;
+  const consumedPct = (consumed / initial) * 100;
+  const remainingPct = 100 - consumedPct;
+
+  if (consumedPct >= 90) {
+    return {
+      consumedPct,
+      remainingPct,
+      severity: 'depleted',
+      badgeLabel: `${remainingPct.toFixed(0)}% restante`,
+      bannerLabel: `⚠️ Fondos casi agotados — solo queda el ${remainingPct.toFixed(1)}% del monto. Prepare la legalización.`,
+      dotColor: 'bg-rose-500',
+      bannerClasses: 'bg-rose-50 border-rose-300 text-rose-800',
+    };
+  }
+  if (consumedPct >= 80) {
+    return {
+      consumedPct,
+      remainingPct,
+      severity: 'critical',
+      badgeLabel: `${remainingPct.toFixed(0)}% restante`,
+      bannerLabel: `Se ha consumido el ${consumedPct.toFixed(0)}% del monto. Inicie la preparación de legalización.`,
+      dotColor: 'bg-orange-500',
+      bannerClasses: 'bg-orange-50 border-orange-300 text-orange-800',
+    };
+  }
+  if (consumedPct >= 75) {
+    return {
+      consumedPct,
+      remainingPct,
+      severity: 'warning',
+      badgeLabel: `${remainingPct.toFixed(0)}% restante`,
+      bannerLabel: `Alerta: se ha consumido el ${consumedPct.toFixed(0)}% del monto. Revise la caja y prepare la legalización.`,
+      dotColor: 'bg-amber-500',
+      bannerClasses: 'bg-amber-50 border-amber-300 text-amber-800',
+    };
+  }
+
+  return null;
+}

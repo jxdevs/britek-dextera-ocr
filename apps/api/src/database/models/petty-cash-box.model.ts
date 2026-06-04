@@ -40,6 +40,12 @@ export class PettyCashBox extends Model {
   @Column({ type: DataType.DATE, allowNull: true })
   declare closed_at: Date | null;
 
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare project_name: string | null;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare cost_center: string | null;
+
   @Column({
     type: DataType.ENUM('open', 'closed'),
     allowNull: false,

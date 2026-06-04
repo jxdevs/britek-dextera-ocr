@@ -85,7 +85,7 @@ export default function WhatsappEventsPage() {
             <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left px-4 py-2 font-medium w-32">Recibido</th>
-                <th className="text-left px-4 py-2 font-medium">Trabajador</th>
+                <th className="text-left px-4 py-2 font-medium">Residente</th>
                 <th className="text-left px-4 py-2 font-medium">Tipo</th>
                 <th className="text-left px-4 py-2 font-medium">Mensaje</th>
                 <th className="text-left px-4 py-2 font-medium w-24">Estado</th>

@@ -258,7 +258,7 @@ export default function FacturaDetailPage() {
                     </select>
                     {boxes.length === 0 && (
                       <p className="mt-1 text-xs text-rose-700">
-                        Este trabajador no está asignado a ninguna caja abierta.
+                        Este residente no está asignado a ninguna caja abierta.
                       </p>
                     )}
                   </>

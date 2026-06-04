@@ -106,7 +106,7 @@ export class ApprovalsService {
       });
       if (!assignment) {
         throw new BadRequestException(
-          'El trabajador de la factura no está asignado a esta caja',
+          'El residente de la factura no está asignado a esta caja',
         );
       }
 
@@ -154,6 +154,29 @@ export class ApprovalsService {
         before: { status: 'pending', total: invoice.total },
         after: { status: 'approved', box_id: dto.box_id, total: finalTotal.toFixed(2), new_balance: newBalance },
       });
+
+      // Alerta de consumo: cuando se consume ≥75% del monto
+      const initialAmount = parseFloat(box.initial_amount);
+      const newBalanceNum = parseFloat(newBalance);
+      if (initialAmount > 0) {
+        const consumedPct = ((initialAmount - newBalanceNum) / initialAmount) * 100;
+        if (consumedPct >= 75) {
+          const severity = consumedPct >= 90 ? 'crítico' : consumedPct >= 80 ? 'alto' : 'moderado';
+          this.audit.log({
+            user,
+            action: 'update',
+            entity: 'petty_cash_box',
+            entityId: box.id,
+            entityLabel: `⚠️ Alerta consumo ${severity}: ${box.name} - ${box.code}`,
+            before: { current_balance: box.current_balance },
+            after: {
+              current_balance: newBalance,
+              consumed_pct: `${consumedPct.toFixed(1)}%`,
+              alert: `Consumo al ${consumedPct.toFixed(0)}% — preparar legalización`,
+            },
+          });
+        }
+      }
     });
 
     return this.invoicesService.findOne(dto.invoice_id);

@@ -33,10 +33,10 @@ export class AuthService {
         action: 'login_failed',
         entity: 'session',
         entityLabel: email,
-        after: { email, reason: 'Trabajador intenta login por dashboard' },
+        after: { email, reason: 'Residente intenta login por dashboard' },
         ip,
       });
-      throw new UnauthorizedException('Los trabajadores se autentican por WhatsApp');
+      throw new UnauthorizedException('Los residentes se autentican por WhatsApp');
     }
     const ok = await bcrypt.compare(password, worker.password_hash);
     if (!ok) {

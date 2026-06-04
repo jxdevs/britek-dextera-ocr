@@ -72,7 +72,7 @@ export function InvoiceUploadModal({ onClose, onCreated }: Props) {
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="text-xs font-medium text-slate-600">Trabajador</label>
+            <label className="text-xs font-medium text-slate-600">Residente</label>
             <select
               value={workerId}
               onChange={(e) => setWorkerId(e.target.value)}
