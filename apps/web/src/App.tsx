@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './lib/auth';
+import AuditLogsPage from './pages/AuditLogsPage';
 import CajaDetailPage from './pages/CajaDetailPage';
 import CajasPage from './pages/CajasPage';
 import FacturaDetailPage from './pages/FacturaDetailPage';
@@ -70,6 +71,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={['admin']}>
                   <WhatsappEventsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/audit"
+              element={
+                <ProtectedRoute roles={['admin']}>
+                  <AuditLogsPage />
                 </ProtectedRoute>
               }
             />

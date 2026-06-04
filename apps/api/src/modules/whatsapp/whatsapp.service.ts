@@ -242,7 +242,26 @@ export class WhatsappService {
     confirmMsg += `• NIT: ${vendorNit}\n`;
     confirmMsg += `• Factura #: ${invoiceNum}\n`;
     confirmMsg += `• Fecha: ${invoiceDate}\n`;
-    confirmMsg += `• Total: $${formatCOP(total)} COP\n`;
+
+    // Items / productos
+    const items = (invoice.extracted_data as Record<string, unknown>)?.items as
+      | Array<{ description: string; quantity?: number; unit_price?: number; total?: number }>
+      | undefined;
+    if (items && items.length > 0) {
+      confirmMsg += `\n🛒 *Productos/Servicios:*\n`;
+      for (const item of items) {
+        let line = `  - ${item.description}`;
+        if (item.quantity != null) line += ` (x${item.quantity})`;
+        if (item.total != null) line += ` — $${formatCOP(item.total)}`;
+        confirmMsg += `${line}\n`;
+      }
+    }
+
+    const subtotal = invoice.subtotal ? `$${formatCOP(invoice.subtotal)}` : '—';
+    const iva = invoice.iva ? `$${formatCOP(invoice.iva)}` : '—';
+    confirmMsg += `\n• Subtotal: ${subtotal}\n`;
+    confirmMsg += `• IVA: ${iva}\n`;
+    confirmMsg += `• *Total: $${formatCOP(total)} COP*\n`;
 
     if (conf > 0 && conf < 0.6) {
       confirmMsg += `\n⚠️ _La calidad de la imagen es baja, los datos podrían ser inexactos._\n`;

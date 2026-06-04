@@ -5,6 +5,7 @@ import {
   IsString,
   Matches,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import type { WorkerRole } from '../../../database/models/worker.model';
 
@@ -23,6 +24,7 @@ export class CreateWorkerDto {
   })
   phone!: string;
 
+  @ValidateIf((o) => o.email !== null && o.email !== undefined)
   @IsOptional()
   @IsEmail()
   email?: string | null;

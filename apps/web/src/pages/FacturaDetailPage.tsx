@@ -84,8 +84,13 @@ export default function FacturaDetailPage() {
       setInvoice(inv);
       setForm(toForm(inv));
       setBoxes(eligible);
-      const onlySufficient = eligible.filter((b) => b.sufficient);
-      if (onlySufficient.length === 1) setBoxId(onlySufficient[0].id);
+      // If box is pre-assigned (from WhatsApp), lock it
+      if (inv.box_id) {
+        setBoxId(inv.box_id);
+      } else {
+        const onlySufficient = eligible.filter((b) => b.sufficient);
+        if (onlySufficient.length === 1) setBoxId(onlySufficient[0].id);
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
@@ -214,31 +219,49 @@ export default function FacturaDetailPage() {
               <Field label="IVA" type="number" value={form.iva} onChange={(v) => update('iva', v)} readOnly={readOnly} />
               <Field label="Total" type="number" value={form.total} onChange={(v) => update('total', v)} readOnly={readOnly} />
             </div>
+            <ItemsTable extractedData={invoice.extracted_data} />
           </div>
 
           {invoice.status === 'pending' ? (
             <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
               <h3 className="text-sm font-semibold text-slate-900">Decisión</h3>
               <div>
-                <label className="text-xs font-medium text-slate-600">Caja para descontar</label>
-                <select
-                  value={boxId}
-                  onChange={(e) => setBoxId(e.target.value)}
-                  disabled={!!submitting}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                >
-                  <option value="">Selecciona una caja…</option>
-                  {boxes.map((b) => (
-                    <option key={b.id} value={b.id} disabled={!b.sufficient}>
-                      {b.code} · {b.name} · {formatMoney(parseFloat(b.current_balance))}
-                      {!b.sufficient ? ' (saldo insuficiente)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {boxes.length === 0 && (
-                  <p className="mt-1 text-xs text-rose-700">
-                    Este trabajador no está asignado a ninguna caja abierta.
-                  </p>
+                <label className="text-xs font-medium text-slate-600">Caja asignada</label>
+                {invoice.box_id ? (
+                  <>
+                    <div className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      {(() => {
+                        const assigned = boxes.find((b) => b.id === invoice.box_id);
+                        return assigned
+                          ? `${assigned.code} · ${assigned.name} · ${formatMoney(parseFloat(assigned.current_balance))}`
+                          : invoice.box
+                            ? `${invoice.box.code} · ${invoice.box.name}`
+                            : invoice.box_id;
+                      })()}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <select
+                      value={boxId}
+                      onChange={(e) => setBoxId(e.target.value)}
+                      disabled={!!submitting}
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    >
+                      <option value="">Selecciona una caja…</option>
+                      {boxes.map((b) => (
+                        <option key={b.id} value={b.id} disabled={!b.sufficient}>
+                          {b.code} · {b.name} · {formatMoney(parseFloat(b.current_balance))}
+                          {!b.sufficient ? ' (saldo insuficiente)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {boxes.length === 0 && (
+                      <p className="mt-1 text-xs text-rose-700">
+                        Este trabajador no está asignado a ninguna caja abierta.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
               <div>
@@ -387,6 +410,53 @@ function ApprovalHistory({ invoice }: { invoice: Invoice }) {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+interface ExtractedItem {
+  description: string;
+  quantity?: number | null;
+  unit_price?: number | null;
+  total?: number | null;
+}
+
+function ItemsTable({ extractedData }: { extractedData: Record<string, unknown> | null }) {
+  if (!extractedData) return null;
+  const items = extractedData.items as ExtractedItem[] | undefined;
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div>
+      <span className="text-xs font-medium text-slate-600">Productos / Servicios</span>
+      <div className="mt-1 border border-slate-200 rounded-md overflow-hidden">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              <th className="text-left px-3 py-1.5 font-medium">Descripción</th>
+              <th className="text-right px-3 py-1.5 font-medium w-14">Cant.</th>
+              <th className="text-right px-3 py-1.5 font-medium w-24">Precio</th>
+              <th className="text-right px-3 py-1.5 font-medium w-24">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.map((item, idx) => (
+              <tr key={idx} className="text-slate-700">
+                <td className="px-3 py-1.5">{item.description}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">
+                  {item.quantity ?? '—'}
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums">
+                  {item.unit_price != null ? formatMoney(item.unit_price) : '—'}
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-medium">
+                  {item.total != null ? formatMoney(item.total) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

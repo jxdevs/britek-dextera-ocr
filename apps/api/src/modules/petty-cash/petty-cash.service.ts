@@ -17,6 +17,7 @@ import {
   Worker,
 } from '../../database/models';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
+import { AuditService } from '../audit/audit.service';
 import { StorageService } from '../storage/storage.service';
 import { AssignWorkersDto } from './dto/assign-workers.dto';
 import { CreateBoxDto } from './dto/create-box.dto';
@@ -29,6 +30,7 @@ export class PettyCashService {
   constructor(
     private readonly sequelize: Sequelize,
     private readonly storage: StorageService,
+    private readonly audit: AuditService,
     @InjectModel(PettyCashBox) private readonly boxes: typeof PettyCashBox,
     @InjectModel(BoxAssignment) private readonly assignments: typeof BoxAssignment,
     @InjectModel(Worker) private readonly workers: typeof Worker,
@@ -105,23 +107,46 @@ export class PettyCashService {
         return created;
       });
 
-      return this.findOne(box.id);
+      const result = await this.findOne(box.id);
+
+      this.audit.log({
+        user,
+        action: 'create',
+        entity: 'petty_cash_box',
+        entityId: box.id,
+        entityLabel: `${dto.name} - ${dto.code}`,
+        after: { code: dto.code, name: dto.name, type: dto.type, initial_amount: dto.initial_amount },
+      });
+
+      return result;
     } catch (err) {
       throw this.mapError(err);
     }
   }
 
-  async close(id: string) {
+  async close(id: string, user: AuthUser) {
     const box = await this.boxes.findByPk(id);
     if (!box) throw new NotFoundException('Caja no encontrada');
     if (box.status === 'closed') {
       throw new ConflictException('La caja ya estaba cerrada');
     }
+    const beforeBalance = box.current_balance;
     await box.update({ status: 'closed', closed_at: new Date() });
+
+    this.audit.log({
+      user,
+      action: 'close',
+      entity: 'petty_cash_box',
+      entityId: id,
+      entityLabel: `${box.name} - ${box.code}`,
+      before: { status: 'open', current_balance: beforeBalance },
+      after: { status: 'closed', closed_at: new Date().toISOString() },
+    });
+
     return this.findOne(id);
   }
 
-  async update(id: string, dto: UpdateBoxDto) {
+  async update(id: string, dto: UpdateBoxDto, user: AuthUser) {
     const box = await this.boxes.findByPk(id);
     if (!box) throw new NotFoundException('Caja no encontrada');
 
@@ -137,11 +162,26 @@ export class PettyCashService {
       return this.findOne(id);
     }
 
+    const beforeData: Record<string, unknown> = {};
+    for (const key of Object.keys(updates)) {
+      beforeData[key] = (box as any)[key];
+    }
+
     try {
       await box.update(updates);
     } catch (err) {
       throw this.mapError(err);
     }
+
+    this.audit.log({
+      user,
+      action: 'update',
+      entity: 'petty_cash_box',
+      entityId: id,
+      entityLabel: `${box.name} - ${box.code}`,
+      before: beforeData,
+      after: updates,
+    });
 
     return this.findOne(id);
   }
@@ -252,6 +292,15 @@ export class PettyCashService {
           }
         }
       }
+    });
+
+    this.audit.log({
+      user,
+      action: 'delete',
+      entity: 'petty_cash_box',
+      entityId: id,
+      entityLabel: `${box.name} - ${box.code}`,
+      before: { code: box.code, name: box.name, type: box.type, initial_amount: box.initial_amount, current_balance: box.current_balance, status: box.status },
     });
 
     return { id, deleted: true };

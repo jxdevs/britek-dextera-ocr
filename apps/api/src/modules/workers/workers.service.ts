@@ -8,6 +8,8 @@ import { InjectModel } from '@nestjs/sequelize';
 import * as bcrypt from 'bcrypt';
 import { UniqueConstraintError } from 'sequelize';
 import { Worker } from '../../database/models';
+import type { AuthUser } from '../auth/decorators/current-user.decorator';
+import { AuditService } from '../audit/audit.service';
 import { CreateWorkerDto } from './dto/create-worker.dto';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 
@@ -24,7 +26,10 @@ const PUBLIC_ATTRS = [
 
 @Injectable()
 export class WorkersService {
-  constructor(@InjectModel(Worker) private readonly workers: typeof Worker) {}
+  constructor(
+    @InjectModel(Worker) private readonly workers: typeof Worker,
+    private readonly audit: AuditService,
+  ) {}
 
   list() {
     return this.workers.findAll({
@@ -39,7 +44,7 @@ export class WorkersService {
     return w;
   }
 
-  async create(dto: CreateWorkerDto) {
+  async create(dto: CreateWorkerDto, user: AuthUser) {
     const role = dto.role ?? 'worker';
     if (role !== 'worker' && (!dto.email || !dto.password)) {
       throw new BadRequestException(
@@ -55,15 +60,29 @@ export class WorkersService {
         role,
         password_hash: dto.password ? await bcrypt.hash(dto.password, 10) : null,
       });
-      return this.findOne(created.id);
+
+      const result = await this.findOne(created.id);
+
+      this.audit.log({
+        user,
+        action: 'create',
+        entity: 'worker',
+        entityId: created.id,
+        entityLabel: dto.name,
+        after: AuditService.sanitize(result.toJSON()),
+      });
+
+      return result;
     } catch (err) {
       throw this.mapError(err);
     }
   }
 
-  async update(id: string, dto: UpdateWorkerDto) {
+  async update(id: string, dto: UpdateWorkerDto, user: AuthUser) {
     const worker = await this.workers.findByPk(id);
     if (!worker) throw new NotFoundException('Trabajador no encontrado');
+
+    const beforeData = AuditService.sanitize(worker.toJSON());
 
     try {
       await worker.update({
@@ -76,16 +95,47 @@ export class WorkersService {
           ? await bcrypt.hash(dto.password, 10)
           : worker.password_hash,
       });
-      return this.findOne(id);
+
+      const result = await this.findOne(id);
+      const afterData = AuditService.sanitize(result.toJSON());
+      const diff = AuditService.diff(beforeData, afterData);
+
+      // Only log if something actually changed
+      if (Object.keys(diff.before).length > 0) {
+        this.audit.log({
+          user,
+          action: 'update',
+          entity: 'worker',
+          entityId: id,
+          entityLabel: worker.name,
+          before: diff.before,
+          after: diff.after,
+        });
+      }
+
+      return result;
     } catch (err) {
       throw this.mapError(err);
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: AuthUser) {
     const worker = await this.workers.findByPk(id);
     if (!worker) throw new NotFoundException('Trabajador no encontrado');
+
+    const beforeData = AuditService.sanitize(worker.toJSON());
+
     await worker.destroy();
+
+    this.audit.log({
+      user,
+      action: 'delete',
+      entity: 'worker',
+      entityId: id,
+      entityLabel: worker.name,
+      before: beforeData,
+    });
+
     return { id };
   }
 

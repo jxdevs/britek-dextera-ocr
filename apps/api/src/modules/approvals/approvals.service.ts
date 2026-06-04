@@ -14,6 +14,7 @@ import {
   PettyCashBox,
 } from '../../database/models';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
+import { AuditService } from '../audit/audit.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { DecideDto } from './dto/decide.dto';
 
@@ -38,6 +39,7 @@ export class ApprovalsService {
   constructor(
     private readonly sequelize: Sequelize,
     private readonly invoicesService: InvoicesService,
+    private readonly audit: AuditService,
     @InjectModel(Invoice) private readonly invoices: typeof Invoice,
     @InjectModel(PettyCashBox) private readonly boxes: typeof PettyCashBox,
     @InjectModel(BoxAssignment) private readonly assignments: typeof BoxAssignment,
@@ -69,14 +71,27 @@ export class ApprovalsService {
           },
           { transaction: t },
         );
+
+        this.audit.log({
+          user,
+          action: 'reject',
+          entity: 'invoice',
+          entityId: invoice.id,
+          entityLabel: `${invoice.vendor_name ?? 'Sin proveedor'} - ${invoice.invoice_number ?? 'S/N'}`,
+          before: { status: 'pending' },
+          after: { status: 'rejected', comments: dto.comments ?? null },
+        });
+
         return;
       }
 
-      if (!dto.box_id) {
+      // Use pre-assigned box (from WhatsApp) if available; otherwise fall back to approver's choice
+      const resolvedBoxId = invoice.box_id ?? dto.box_id;
+      if (!resolvedBoxId) {
         throw new BadRequestException('Para aprobar debes elegir una caja');
       }
 
-      const box = await this.boxes.findByPk(dto.box_id, {
+      const box = await this.boxes.findByPk(resolvedBoxId, {
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
@@ -129,6 +144,16 @@ export class ApprovalsService {
         },
         { transaction: t },
       );
+
+      this.audit.log({
+        user,
+        action: 'approve',
+        entity: 'invoice',
+        entityId: invoice.id,
+        entityLabel: `${invoice.vendor_name ?? 'Sin proveedor'} - ${invoice.invoice_number ?? 'S/N'}`,
+        before: { status: 'pending', total: invoice.total },
+        after: { status: 'approved', box_id: dto.box_id, total: finalTotal.toFixed(2), new_balance: newBalance },
+      });
     });
 
     return this.invoicesService.findOne(dto.invoice_id);

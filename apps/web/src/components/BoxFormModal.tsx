@@ -216,7 +216,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                   <Loader2 className="size-4 animate-spin text-slate-400" />
                 </div>
               ) : (
-                allWorkers.map((w) => {
+                allWorkers.filter((w) => w.role === 'worker').map((w) => {
                   const isSelected = selected.includes(w.id);
                   const isPrimary = primary === w.id;
                   const busyBoxCode = busyWorkers.get(w.id);
@@ -245,7 +245,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                         <p className="text-sm font-medium text-slate-900 truncate">
                           {w.name}
                           <span className="ml-1.5 text-xs text-slate-500 font-normal">
-                            ({w.role})
+                            (Trabajador)
                           </span>
                         </p>
                         {isDisabled ? (

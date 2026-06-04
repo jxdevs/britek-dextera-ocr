@@ -367,3 +367,58 @@ export async function extractInvoice(file: File, model: string): Promise<Extract
     body: form,
   });
 }
+
+// ============ Audit Logs ============
+
+export type AuditAction =
+  | 'login_success'
+  | 'login_failed'
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'close'
+  | 'approve'
+  | 'reject';
+
+export interface AuditLogEntry {
+  id: string;
+  user_id: string | null;
+  user_name: string;
+  user_role: string;
+  action: AuditAction;
+  entity: string;
+  entity_id: string | null;
+  entity_label: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  ip: string | null;
+  created_at: string;
+}
+
+export interface AuditListResponse {
+  rows: AuditLogEntry[];
+  count: number;
+}
+
+export interface AuditListFilters {
+  action?: string;
+  entity?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const auditLogs = {
+  list: (filters: AuditListFilters = {}) => {
+    const qs = new URLSearchParams();
+    if (filters.action) qs.set('action', filters.action);
+    if (filters.entity) qs.set('entity', filters.entity);
+    if (filters.from) qs.set('from', filters.from);
+    if (filters.to) qs.set('to', filters.to);
+    if (filters.limit) qs.set('limit', String(filters.limit));
+    if (filters.offset) qs.set('offset', String(filters.offset));
+    const q = qs.toString();
+    return request<AuditListResponse>(`/audit-logs${q ? `?${q}` : ''}`);
+  },
+};

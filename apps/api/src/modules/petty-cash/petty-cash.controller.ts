@@ -49,14 +49,18 @@ export class PettyCashController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateBoxDto,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.service.update(id, dto);
+    return this.service.update(id, dto, user);
   }
 
   @Post(':id/close')
   @Roles('admin')
-  close(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.service.close(id);
+  close(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.close(id, user);
   }
 
   @Post(':id/assign')
