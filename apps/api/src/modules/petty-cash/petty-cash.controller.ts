@@ -78,14 +78,14 @@ export class PettyCashController {
     return this.service.movements(id);
   }
 
-  @Delete(':id/movements/:approvalId')
+  @Delete(':id/movements/:invoiceId')
   @Roles('admin')
   removeMovement(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Param('approvalId', new ParseUUIDPipe()) approvalId: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.service.removeMovement(id, approvalId, user);
+    return this.service.removeMovement(id, invoiceId, user);
   }
 
   @Delete(':id')

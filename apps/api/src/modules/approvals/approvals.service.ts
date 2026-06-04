@@ -59,6 +59,20 @@ export class ApprovalsService {
       }
 
       if (dto.action === 'reject') {
+        // Al rechazar, devolver el saldo a la caja (ya se descontó al subir)
+        if (invoice.box_id) {
+          const box = await this.boxes.findByPk(invoice.box_id, {
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+          });
+          if (box) {
+            const invoiceTotal = parseFloat(invoice.total);
+            const currentBalance = parseFloat(box.current_balance);
+            const restoredBalance = (currentBalance + invoiceTotal).toFixed(2);
+            await box.update({ current_balance: restoredBalance }, { transaction: t });
+          }
+        }
+
         await invoice.update({ status: 'rejected' }, { transaction: t });
         await this.approvals.create(
           {
@@ -79,59 +93,51 @@ export class ApprovalsService {
           entityId: invoice.id,
           entityLabel: `${invoice.vendor_name ?? 'Sin proveedor'} - ${invoice.invoice_number ?? 'S/N'}`,
           before: { status: 'pending' },
-          after: { status: 'rejected', comments: dto.comments ?? null },
+          after: { status: 'rejected', comments: dto.comments ?? null, balance_restored: true },
         });
 
         return;
       }
 
-      // Use pre-assigned box (from WhatsApp) if available; otherwise fall back to approver's choice
-      const resolvedBoxId = invoice.box_id ?? dto.box_id;
-      if (!resolvedBoxId) {
-        throw new BadRequestException('Para aprobar debes elegir una caja');
+      // ── Aprobar / Legalizar ──
+      // El saldo ya se descontó cuando el residente subió la factura.
+      // Aquí solo validamos y legalizamos. Si el aprobador editó el total,
+      // ajustamos la diferencia en el saldo.
+
+      if (!invoice.box_id) {
+        throw new BadRequestException(
+          'La factura no tiene caja asignada. El residente debe subirla desde WhatsApp.',
+        );
       }
 
-      const box = await this.boxes.findByPk(resolvedBoxId, {
+      const box = await this.boxes.findByPk(invoice.box_id, {
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
       if (!box) throw new NotFoundException('Caja no encontrada');
-      if (box.status !== 'open') {
-        throw new ConflictException('La caja está cerrada');
-      }
 
-      const assignment = await this.assignments.findOne({
-        where: { box_id: box.id, worker_id: invoice.worker_id },
-        transaction: t,
-      });
-      if (!assignment) {
-        throw new BadRequestException(
-          'El residente de la factura no está asignado a esta caja',
-        );
-      }
-
+      const originalTotal = parseFloat(invoice.total);
       const finalTotal = parseFloat(
         (editedFields.total as string | undefined) ?? invoice.total,
       );
-      const currentBalance = parseFloat(box.current_balance);
       if (!Number.isFinite(finalTotal) || finalTotal <= 0) {
         throw new BadRequestException('El total debe ser un número positivo');
       }
-      if (finalTotal > currentBalance) {
-        throw new BadRequestException(
-          `Saldo insuficiente: la caja tiene ${currentBalance}, factura es ${finalTotal}`,
-        );
+
+      // Si el aprobador editó el total, ajustar la diferencia en el saldo
+      let newBalance = box.current_balance;
+      if (Math.abs(finalTotal - originalTotal) > 0.01) {
+        const diff = originalTotal - finalTotal; // positivo = aprobador bajó el total → devolver
+        const currentBalance = parseFloat(box.current_balance);
+        newBalance = (currentBalance + diff).toFixed(2);
+        await box.update({ current_balance: newBalance }, { transaction: t });
       }
 
       const invoiceUpdates: Record<string, unknown> = {
         ...editedFields,
-        box_id: box.id,
         status: 'approved',
       };
       await invoice.update(invoiceUpdates, { transaction: t });
-
-      const newBalance = (currentBalance - finalTotal).toFixed(2);
-      await box.update({ current_balance: newBalance }, { transaction: t });
 
       await this.approvals.create(
         {
@@ -152,31 +158,8 @@ export class ApprovalsService {
         entityId: invoice.id,
         entityLabel: `${invoice.vendor_name ?? 'Sin proveedor'} - ${invoice.invoice_number ?? 'S/N'}`,
         before: { status: 'pending', total: invoice.total },
-        after: { status: 'approved', box_id: dto.box_id, total: finalTotal.toFixed(2), new_balance: newBalance },
+        after: { status: 'approved', total: finalTotal.toFixed(2) },
       });
-
-      // Alerta de consumo: cuando se consume ≥75% del monto
-      const initialAmount = parseFloat(box.initial_amount);
-      const newBalanceNum = parseFloat(newBalance);
-      if (initialAmount > 0) {
-        const consumedPct = ((initialAmount - newBalanceNum) / initialAmount) * 100;
-        if (consumedPct >= 75) {
-          const severity = consumedPct >= 90 ? 'crítico' : consumedPct >= 80 ? 'alto' : 'moderado';
-          this.audit.log({
-            user,
-            action: 'update',
-            entity: 'petty_cash_box',
-            entityId: box.id,
-            entityLabel: `⚠️ Alerta consumo ${severity}: ${box.name} - ${box.code}`,
-            before: { current_balance: box.current_balance },
-            after: {
-              current_balance: newBalance,
-              consumed_pct: `${consumedPct.toFixed(1)}%`,
-              alert: `Consumo al ${consumedPct.toFixed(0)}% — preparar legalización`,
-            },
-          });
-        }
-      }
     });
 
     return this.invoicesService.findOne(dto.invoice_id);

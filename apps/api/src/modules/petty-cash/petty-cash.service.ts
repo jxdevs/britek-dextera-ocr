@@ -241,30 +241,31 @@ export class PettyCashService {
     const box = await this.boxes.findByPk(id);
     if (!box) throw new NotFoundException('Caja no encontrada');
 
-    return this.approvals.findAll({
-      where: { action: 'approve' },
+    return this.invoices.findAll({
+      where: { box_id: id },
+      attributes: [
+        'id', 'vendor_name', 'vendor_nit', 'invoice_number', 'invoice_date',
+        'total', 'status', 'submitted_at',
+      ],
       include: [
         {
-          model: Invoice,
-          where: { box_id: id, status: 'approved' },
-          required: true,
-          attributes: ['id', 'vendor_name', 'invoice_number', 'invoice_date', 'total'],
-        },
-        {
-          model: Worker,
-          as: 'approver',
-          attributes: ['id', 'name'],
+          model: Approval,
+          required: false,
+          attributes: ['id', 'action', 'comments', 'created_at'],
+          include: [
+            { model: Worker, as: 'approver', attributes: ['id', 'name'] },
+          ],
         },
       ],
-      order: [['created_at', 'DESC']],
+      order: [['submitted_at', 'DESC']],
     });
   }
 
   /**
-   * Reverts an approved movement: deletes the approval, restores the box balance,
-   * and sets the invoice back to pending. Admin only.
+   * Removes an invoice from a box: deletes approvals, restores the box balance,
+   * and removes the invoice. Admin only.
    */
-  async removeMovement(boxId: string, approvalId: string, user: AuthUser) {
+  async removeMovement(boxId: string, invoiceId: string, user: AuthUser) {
     if (user.role !== 'admin') {
       throw new ForbiddenException('Solo un admin puede eliminar movimientos');
     }
@@ -272,14 +273,9 @@ export class PettyCashService {
     const box = await this.boxes.findByPk(boxId);
     if (!box) throw new NotFoundException('Caja no encontrada');
 
-    const approval = await this.approvals.findByPk(approvalId, {
-      include: [{ model: Invoice }],
-    });
-    if (!approval) throw new NotFoundException('Movimiento no encontrado');
-
-    const invoice = approval.invoice;
+    const invoice = await this.invoices.findByPk(invoiceId);
     if (!invoice || invoice.box_id !== boxId) {
-      throw new BadRequestException('El movimiento no pertenece a esta caja');
+      throw new BadRequestException('La factura no pertenece a esta caja');
     }
 
     const invoiceTotal = parseFloat(invoice.total);
@@ -290,41 +286,40 @@ export class PettyCashService {
       const restoredBalance = (currentBalance + invoiceTotal).toFixed(2);
       await box.update({ current_balance: restoredBalance }, { transaction: t });
 
-      // 2. Reset invoice: remove box assignment and set back to pending
-      await invoice.update(
-        { box_id: null, status: 'pending' },
-        { transaction: t },
-      );
+      // 2. Delete approvals linked to this invoice
+      await this.approvals.destroy({
+        where: { invoice_id: invoiceId },
+        transaction: t,
+      });
 
-      // 3. Delete the approval record
-      await approval.destroy({ transaction: t });
+      // 3. Delete the invoice
+      await invoice.destroy({ transaction: t });
 
       // 4. Audit log
       this.audit.log({
         user,
         action: 'delete',
-        entity: 'approval',
-        entityId: approvalId,
-        entityLabel: `Movimiento eliminado: ${invoice.vendor_name ?? 'Sin proveedor'} - $${invoiceTotal.toFixed(2)}`,
+        entity: 'invoice',
+        entityId: invoiceId,
+        entityLabel: `Factura eliminada: ${invoice.vendor_name ?? 'Sin proveedor'} - $${invoiceTotal.toFixed(2)}`,
         before: {
-          status: 'approved',
+          status: invoice.status,
           box_id: boxId,
           total: invoice.total,
           box_balance: box.current_balance,
         },
         after: {
-          status: 'pending',
-          box_id: null,
+          deleted: true,
           restored_balance: restoredBalance,
         },
       });
 
       this.logger.warn(
-        `Admin ${user.name} eliminó movimiento ${approvalId} de caja ${box.code}. Saldo restaurado: ${box.current_balance} → ${restoredBalance}`,
+        `Admin ${user.name} eliminó factura ${invoiceId} de caja ${box.code}. Saldo restaurado: ${box.current_balance} → ${restoredBalance}`,
       );
     });
 
-    return { id: approvalId, deleted: true };
+    return { id: invoiceId, deleted: true };
   }
 
   async remove(id: string, user: AuthUser) {

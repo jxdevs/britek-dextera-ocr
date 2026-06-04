@@ -384,8 +384,24 @@ export class WhatsappService {
       return;
     }
 
-    // Assign box to invoice (stays pending for approver review)
-    await invoice.update({ box_id: box.id });
+    // Assign box to invoice AND deduct balance immediately (in a transaction)
+    await this.sequelize.transaction(async (t) => {
+      // Lock the box row to prevent race conditions
+      const lockedBox = await this.boxes.findByPk(box.id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      if (!lockedBox) throw new Error('Caja no encontrada');
+
+      const currentBalance = parseFloat(lockedBox.current_balance);
+      if (currentBalance < total) {
+        throw new Error(`Saldo insuficiente: ${currentBalance} < ${total}`);
+      }
+
+      const newBalance = (currentBalance - total).toFixed(2);
+      await lockedBox.update({ current_balance: newBalance }, { transaction: t });
+      await invoice.update({ box_id: box.id }, { transaction: t });
+    });
 
     // ── Verification: reload from DB and confirm it was saved ──
     await invoice.reload();

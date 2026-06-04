@@ -1,8 +1,8 @@
-import { AlertTriangle, ArrowLeft, Clock, Eye, Loader2, Lock, Pencil, Settings, Star, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Clock, Eye, Loader2, Lock, Pencil, Settings, Star, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
-import { pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
+import { approvals as approvalsApi, pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cn, formatMoney, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
@@ -11,6 +11,7 @@ export default function CajaDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canEdit = user?.role === 'admin';
+  const canApprove = user?.role === 'admin' || user?.role === 'approver';
 
   const [box, setBox] = useState<PettyCashBox | null>(null);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -77,10 +78,12 @@ export default function CajaDetailPage() {
   }
 
   const initial = parseFloat(box.initial_amount);
-  const legalized = movements.reduce((sum, m) => sum + parseFloat(m.invoice.total), 0);
-  const pending = initial - legalized;
+  const activeMovements = movements.filter((m) => m.status !== 'rejected');
+  const consumed = activeMovements.reduce((sum, m) => sum + parseFloat(m.total), 0);
+  const legalized = movements.filter((m) => m.status === 'approved').reduce((sum, m) => sum + parseFloat(m.total), 0);
+  const pendingCount = movements.filter((m) => m.status === 'pending').length;
+  const consumedPct = initial > 0 ? (consumed / initial) * 100 : 0;
   const legalizedPct = initial > 0 ? (legalized / initial) * 100 : 0;
-  const pendingPct = initial > 0 ? (pending / initial) * 100 : 0;
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -133,14 +136,6 @@ export default function CajaDetailPage() {
               <Settings className="size-4" />
               Editar caja
             </button>
-            {/* <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 hover:bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700"
-            >
-              <Pencil className="size-4" />
-              Asignar residentes
-            </button> */}
             <button
               type="button"
               onClick={handleClose}
@@ -200,12 +195,12 @@ export default function CajaDetailPage() {
 
       <div className="grid grid-cols-4 gap-4">
         <Card label="Monto inicial" value={formatMoney(initial)} muted="asignado a la caja" />
+        <Card label="Consumido" value={formatMoney(consumed)} muted={`${consumedPct.toFixed(1)}% del monto`} />
         <Card label="Legalizado" value={formatMoney(legalized)} muted={`${legalizedPct.toFixed(1)}% del monto`} />
-        <Card label="Pendiente por legalizar" value={formatMoney(pending)} muted={`${pendingPct.toFixed(1)}% restante`} />
         <Card
-          label="Movimientos aprobados"
-          value={String(movements.length)}
-          muted="facturas legalizadas"
+          label="Pendientes de legalizar"
+          value={String(pendingCount)}
+          muted={pendingCount > 0 ? 'facturas por revisar' : 'todo legalizado'}
         />
       </div>
 
@@ -292,12 +287,12 @@ export default function CajaDetailPage() {
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200">
           <h3 className="text-sm font-semibold text-slate-900">
-            Movimientos ({movements.length})
+            Facturas ({movements.length})
           </h3>
         </div>
         {movements.length === 0 ? (
           <div className="py-12 text-center text-sm text-slate-500">
-            Sin movimientos. Aparecerán aquí cuando se aprueben facturas.
+            Sin facturas. Aparecerán aquí cuando el residente las suba por WhatsApp.
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -307,75 +302,143 @@ export default function CajaDetailPage() {
                 <th className="text-left px-4 py-2 font-medium">Proveedor</th>
                 <th className="text-left px-4 py-2 font-medium">Factura</th>
                 <th className="text-right px-4 py-2 font-medium">Monto</th>
+                <th className="text-center px-4 py-2 font-medium">Estado</th>
                 <th className="text-left px-4 py-2 font-medium">Aprobador</th>
                 <th className="text-center px-4 py-2 font-medium">Soporte</th>
-                {canEdit && <th className="text-center px-4 py-2 font-medium">Acciones</th>}
+                {(canEdit || canApprove) && <th className="text-center px-4 py-2 font-medium">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {movements.map((m) => (
-                <tr
-                  key={m.id}
-                  className="hover:bg-slate-50 transition-colors"
-                >
-                  <td className="px-4 py-2 text-slate-700 tabular-nums">
-                    {new Date(m.created_at).toLocaleDateString('es-CO')}
-                  </td>
-                  <td
-                    className="px-4 py-2 text-slate-900 cursor-pointer hover:text-sky-700"
-                    onClick={() => navigate(`/facturas/${m.invoice.id}`)}
+              {movements.map((m) => {
+                const approval = m.approvals?.[0];
+                return (
+                  <tr
+                    key={m.id}
+                    className={cn(
+                      'hover:bg-slate-50 transition-colors',
+                      m.status === 'rejected' && 'opacity-50',
+                    )}
                   >
-                    {m.invoice.vendor_name ?? '—'}
-                  </td>
-                  <td className="px-4 py-2 text-slate-700 tabular-nums">
-                    {m.invoice.invoice_number ?? '—'}
-                  </td>
-                  <td className="px-4 py-2 text-right text-slate-900 tabular-nums font-medium">
-                    {formatMoney(parseFloat(m.invoice.total))}
-                  </td>
-                  <td className="px-4 py-2 text-slate-700">{m.approver.name}</td>
-                  <td className="px-4 py-2 text-center">
-                    <span
-                      className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 cursor-pointer"
-                      onClick={() => navigate(`/facturas/${m.invoice.id}`)}
-                    >
-                      <Eye className="size-3.5" />
-                      Ver
-                    </span>
-                  </td>
-                  {canEdit && (
-                    <td className="px-4 py-2 text-center">
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (!confirm(`¿Eliminar este movimiento de ${m.invoice.vendor_name ?? 'Sin proveedor'} por ${formatMoney(parseFloat(m.invoice.total))}? Se restaurará el saldo a la caja y la factura volverá a estado pendiente.`)) return;
-                          try {
-                            await pettyCash.removeMovement(box.id, m.id);
-                            await load();
-                          } catch (err) {
-                            alert(err instanceof Error ? err.message : 'Error al eliminar movimiento');
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-800"
-                        title="Eliminar movimiento"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
+                    <td className="px-4 py-2 text-slate-700 tabular-nums">
+                      {new Date(m.submitted_at).toLocaleDateString('es-CO')}
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td
+                      className="px-4 py-2 text-slate-900 cursor-pointer hover:text-sky-700"
+                      onClick={() => navigate(`/facturas/${m.id}`)}
+                    >
+                      {m.vendor_name ?? '—'}
+                    </td>
+                    <td className="px-4 py-2 text-slate-700 tabular-nums">
+                      {m.invoice_number ?? '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right text-slate-900 tabular-nums font-medium">
+                      {formatMoney(parseFloat(m.total))}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <span className={cn(
+                        'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ring-1 ring-inset',
+                        m.status === 'approved'
+                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                          : m.status === 'rejected'
+                            ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                            : 'bg-amber-50 text-amber-700 ring-amber-200',
+                      )}>
+                        {m.status === 'approved' ? 'Legalizada' : m.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-slate-700">
+                      {approval?.approver?.name ?? '—'}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <span
+                        className="inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 cursor-pointer"
+                        onClick={() => navigate(`/facturas/${m.id}`)}
+                      >
+                        <Eye className="size-3.5" />
+                        Ver
+                      </span>
+                    </td>
+                    {(canEdit || canApprove) && (
+                      <td className="px-4 py-2">
+                        <div className="flex items-center justify-center gap-1">
+                          {/* Aprobar / Rechazar — solo para pendientes */}
+                          {m.status === 'pending' && canApprove && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (!confirm(`¿Legalizar la factura de ${m.vendor_name ?? 'Sin proveedor'} por ${formatMoney(parseFloat(m.total))}?`)) return;
+                                  try {
+                                    await approvalsApi.decide({ invoice_id: m.id, action: 'approve' });
+                                    await load();
+                                  } catch (err) {
+                                    alert(err instanceof Error ? err.message : 'Error al legalizar');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100 transition-colors"
+                                title="Legalizar factura"
+                              >
+                                <Check className="size-3" />
+                                Legalizar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const reason = prompt('Motivo del rechazo:');
+                                  if (!reason) return;
+                                  try {
+                                    await approvalsApi.decide({ invoice_id: m.id, action: 'reject', comments: reason });
+                                    await load();
+                                  } catch (err) {
+                                    alert(err instanceof Error ? err.message : 'Error al rechazar');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-0.5 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100 transition-colors"
+                                title="Rechazar factura"
+                              >
+                                <X className="size-3" />
+                                Rechazar
+                              </button>
+                            </>
+                          )}
+                          {/* Eliminar — solo admin */}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!confirm(`¿Eliminar esta factura de ${m.vendor_name ?? 'Sin proveedor'} por ${formatMoney(parseFloat(m.total))}? Se restaurará el saldo a la caja.`)) return;
+                                try {
+                                  await pettyCash.removeMovement(box.id, m.id);
+                                  await load();
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Error al eliminar');
+                                }
+                              }}
+                              className="inline-flex items-center gap-0.5 text-xs font-medium text-rose-600 hover:text-rose-800 ml-1"
+                              title="Eliminar factura"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot className="border-t-2 border-slate-200 bg-slate-50">
               <tr>
                 <td colSpan={3} className="px-4 py-2 text-sm font-semibold text-slate-900 text-right">
-                  Total
+                  Total consumido
                 </td>
                 <td className="px-4 py-2 text-right text-sm font-bold text-slate-900 tabular-nums">
-                  {formatMoney(movements.reduce((sum, m) => sum + parseFloat(m.invoice.total), 0))}
+                  {formatMoney(activeMovements.reduce((sum, m) => sum + parseFloat(m.total), 0))}
                 </td>
-                <td colSpan={canEdit ? 3 : 2} />
+                <td colSpan={(canEdit || canApprove) ? 4 : 3} />
               </tr>
             </tfoot>
           </table>

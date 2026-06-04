@@ -161,19 +161,20 @@ export interface CreateBoxInput {
 
 export interface Movement {
   id: string;
-  invoice_id: string;
-  approver_id: string;
-  action: 'approve' | 'reject';
-  comments: string | null;
-  created_at: string;
-  invoice: {
+  vendor_name: string | null;
+  vendor_nit: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  total: string;
+  status: 'pending' | 'approved' | 'rejected';
+  submitted_at: string;
+  approvals: Array<{
     id: string;
-    vendor_name: string | null;
-    invoice_number: string | null;
-    invoice_date: string | null;
-    total: string;
-  };
-  approver: { id: string; name: string };
+    action: 'approve' | 'reject';
+    comments: string | null;
+    created_at: string;
+    approver: { id: string; name: string };
+  }>;
 }
 
 export interface UpdateBoxInput {
@@ -209,8 +210,8 @@ export const pettyCash = {
       body: JSON.stringify({ worker_ids, primary_worker_id }),
     }),
   movements: (id: string) => request<Movement[]>(`/petty-cash/${id}/movements`),
-  removeMovement: (boxId: string, approvalId: string) =>
-    request<{ id: string; deleted: boolean }>(`/petty-cash/${boxId}/movements/${approvalId}`, {
+  removeMovement: (boxId: string, invoiceId: string) =>
+    request<{ id: string; deleted: boolean }>(`/petty-cash/${boxId}/movements/${invoiceId}`, {
       method: 'DELETE',
     }),
   remove: (id: string) =>
