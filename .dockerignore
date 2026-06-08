@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.env
+.env.*
+!.env.production
+*.log
+uploads
+apps/api/uploads
+apps/api/dist
+apps/web/dist
+.vscode
+.idea
+*.md
+docs
