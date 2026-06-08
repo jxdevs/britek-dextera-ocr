@@ -30,7 +30,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (res.status === 401) {
     setToken(null);
-    if (!path.startsWith('/auth/login')) {
+    if (!path.startsWith('/auth/login') && !path.startsWith('/auth/google')) {
       window.dispatchEvent(new CustomEvent('ocrdemo:logout'));
     }
   }
@@ -67,11 +67,20 @@ export interface LoginResponse {
 }
 
 export const auth = {
-  login: (email: string, password: string) =>
-    request<LoginResponse>('/auth/login', {
+  // ─── LOGIN CON EMAIL/PASSWORD (COMENTADO) ───────────────────────────
+  // login: (email: string, password: string) =>
+  //   request<LoginResponse>('/auth/login', {
+  //     method: 'POST',
+  //     body: JSON.stringify({ email, password }),
+  //   }),
+
+  // ─── LOGIN CON GOOGLE ───────────────────────────────────────────────
+  googleLogin: (credential: string) =>
+    request<LoginResponse>('/auth/google', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ credential }),
     }),
+
   me: () => request<AuthUser>('/auth/me'),
 };
 

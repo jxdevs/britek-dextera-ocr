@@ -10,6 +10,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
+    ConfigModule,
     SequelizeModule.forFeature([Worker]),
     PassportModule,
     JwtModule.registerAsync({
@@ -26,3 +27,4 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   exports: [AuthService],
 })
 export class AuthModule {}
+

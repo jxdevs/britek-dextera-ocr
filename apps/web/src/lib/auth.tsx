@@ -12,7 +12,10 @@ import { auth, getToken, setToken, type AuthUser } from './api';
 interface AuthState {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  // ─── LOGIN CON EMAIL/PASSWORD (COMENTADO) ───────────────────────────
+  // login: (email: string, password: string) => Promise<void>;
+  // ─── LOGIN CON GOOGLE ───────────────────────────────────────────────
+  loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -48,8 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('ocrdemo:logout', onLogout);
   }, [refresh]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await auth.login(email, password);
+  // ─── LOGIN CON EMAIL/PASSWORD (COMENTADO) ───────────────────────────
+  // const login = useCallback(async (email: string, password: string) => {
+  //   const res = await auth.login(email, password);
+  //   setToken(res.access_token);
+  //   setUser(res.user);
+  // }, []);
+
+  // ─── LOGIN CON GOOGLE ───────────────────────────────────────────────
+  const loginWithGoogle = useCallback(async (credential: string) => {
+    const res = await auth.googleLogin(credential);
     setToken(res.access_token);
     setUser(res.user);
   }, []);
@@ -59,7 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
+  const value = useMemo(
+    () => ({ user, loading, loginWithGoogle, logout }),
+    [user, loading, loginWithGoogle, logout],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

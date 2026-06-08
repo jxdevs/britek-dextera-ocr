@@ -23,6 +23,9 @@ export default () => ({
     apiUrl: process.env.KAPSO_API_URL ?? 'https://api.kapso.ai/v1',
     phoneNumberId: process.env.KAPSO_PHONE_NUMBER_ID ?? '',
   },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+  },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY ?? '',
     defaultModel: process.env.GEMINI_DEFAULT_MODEL ?? 'gemini-2.5-flash',
