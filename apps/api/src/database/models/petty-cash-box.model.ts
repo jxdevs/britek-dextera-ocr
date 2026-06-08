@@ -12,7 +12,7 @@ import { BoxAssignment } from './box-assignment.model';
 import { Invoice } from './invoice.model';
 
 export type BoxType = 'individual' | 'shared';
-export type BoxStatus = 'open' | 'closed';
+export type BoxStatus = 'open' | 'closed' | 'blocked';
 
 @Table({ tableName: 'petty_cash_boxes', timestamps: true, underscored: true })
 export class PettyCashBox extends Model {
@@ -40,6 +40,9 @@ export class PettyCashBox extends Model {
   @Column({ type: DataType.DATE, allowNull: true })
   declare closed_at: Date | null;
 
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare expires_at: Date | null;
+
   @Column({ type: DataType.STRING, allowNull: true })
   declare project_name: string | null;
 
@@ -47,7 +50,7 @@ export class PettyCashBox extends Model {
   declare cost_center: string | null;
 
   @Column({
-    type: DataType.ENUM('open', 'closed'),
+    type: DataType.ENUM('open', 'closed', 'blocked'),
     allowNull: false,
     defaultValue: 'open',
   })

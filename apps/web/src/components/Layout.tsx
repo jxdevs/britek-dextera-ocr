@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 const navItems = [
   { to: '/facturas', label: 'Facturas', icon: Receipt, roles: ['admin', 'approver'] as const },
   { to: '/cajas', label: 'Cajas menores', icon: Wallet, roles: ['admin', 'approver'] as const },
-  { to: '/workers', label: 'Residentes', icon: Users, roles: ['admin'] as const },
+  { to: '/workers', label: 'Usuarios', icon: Users, roles: ['admin'] as const },
   { to: '/audit', label: 'Auditoría', icon: ScrollText, roles: ['admin'] as const },
   // { to: '/whatsapp', label: 'WhatsApp · debug', icon: MessageSquare, roles: ['admin'] as const },
   // { to: '/test-extraction', label: 'Test de extracción', icon: ScanLine, roles: null },

@@ -11,7 +11,17 @@ import { Worker } from './worker.model';
 import { PettyCashBox } from './petty-cash-box.model';
 import { Approval } from './approval.model';
 
-export type InvoiceStatus = 'pending' | 'approved' | 'rejected';
+export type InvoiceStatus = 'pending' | 'observed' | 'approved' | 'rejected';
+
+export type ExpenseCategory =
+  | 'combustible'
+  | 'transporte'
+  | 'peajes'
+  | 'parqueaderos'
+  | 'materiales'
+  | 'consumibles'
+  | 'alimentacion'
+  | 'otro';
 
 @Table({ tableName: 'invoices', timestamps: true, underscored: true })
 export class Invoice extends Model {
@@ -30,7 +40,7 @@ export class Invoice extends Model {
   declare image_url: string;
 
   @Column({
-    type: DataType.ENUM('pending', 'approved', 'rejected'),
+    type: DataType.ENUM('pending', 'observed', 'approved', 'rejected'),
     allowNull: false,
     defaultValue: 'pending',
   })
@@ -65,6 +75,21 @@ export class Invoice extends Model {
 
   @Column({ type: DataType.FLOAT, allowNull: true })
   declare confidence_score: number | null;
+
+  @Column({
+    type: DataType.ENUM(
+      'combustible', 'transporte', 'peajes', 'parqueaderos',
+      'materiales', 'consumibles', 'alimentacion', 'otro',
+    ),
+    allowNull: true,
+  })
+  declare expense_category: ExpenseCategory | null;
+
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  declare requires_special_approval: boolean;
+
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  declare reported_late: boolean;
 
   @Column({ type: DataType.DATE, allowNull: false, defaultValue: DataType.NOW })
   declare submitted_at: Date;

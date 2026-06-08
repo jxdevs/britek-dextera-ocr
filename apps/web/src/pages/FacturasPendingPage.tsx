@@ -3,19 +3,39 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthImage } from '../components/AuthImage';
 import { InvoiceUploadModal } from '../components/InvoiceUploadModal';
-import { invoices as invoicesApi, type Invoice, type InvoiceStatus } from '../lib/api';
+import { invoices as invoicesApi, type Invoice, type InvoiceStatus, type ExpenseCategory } from '../lib/api';
 import { cn, formatMoney } from '../lib/utils';
 
 const TABS: { value: InvoiceStatus; label: string }[] = [
   { value: 'pending', label: 'Pendientes' },
+  { value: 'observed', label: 'Observadas' },
   { value: 'approved', label: 'Aprobadas' },
   { value: 'rejected', label: 'Rechazadas' },
 ];
 
 const STATUS_TONE: Record<InvoiceStatus, string> = {
   pending: 'bg-amber-50 text-amber-800 ring-amber-200',
+  observed: 'bg-violet-50 text-violet-800 ring-violet-200',
   approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   rejected: 'bg-rose-50 text-rose-700 ring-rose-200',
+};
+
+const STATUS_LABEL: Record<InvoiceStatus, string> = {
+  pending: 'Pendiente',
+  observed: 'Observada',
+  approved: 'Aprobada',
+  rejected: 'Rechazada',
+};
+
+const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
+  combustible: 'Combustible',
+  transporte: 'Transporte',
+  peajes: 'Peajes',
+  parqueaderos: 'Parqueaderos',
+  materiales: 'Materiales',
+  consumibles: 'Consumibles',
+  alimentacion: 'Alimentación',
+  otro: 'Otro',
 };
 
 export default function FacturasPendingPage() {
@@ -92,7 +112,9 @@ export default function FacturasPendingPage() {
         <div className="bg-white border border-slate-200 rounded-lg py-12 text-center text-sm text-slate-500">
           {status === 'pending'
             ? 'No hay facturas pendientes. Carga una manualmente para probar el flujo.'
-            : 'Sin facturas en este estado.'}
+            : status === 'observed'
+              ? 'No hay facturas observadas (requiriendo aprobación de admin).'
+              : 'Sin facturas en este estado.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -118,11 +140,7 @@ export default function FacturasPendingPage() {
                       STATUS_TONE[inv.status],
                     )}
                   >
-                    {inv.status === 'pending'
-                      ? 'Pendiente'
-                      : inv.status === 'approved'
-                        ? 'Aprobada'
-                        : 'Rechazada'}
+                    {STATUS_LABEL[inv.status]}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -142,9 +160,26 @@ export default function FacturasPendingPage() {
                       minute: '2-digit',
                     })}
                   </span>
-                  {inv.confidence_score !== null && (
-                    <ConfidencePill score={inv.confidence_score} />
-                  )}
+                  <div className="flex items-center gap-1">
+                    {inv.expense_category && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                        {CATEGORY_LABEL[inv.expense_category] ?? inv.expense_category}
+                      </span>
+                    )}
+                    {inv.reported_late && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800">
+                        Tardío
+                      </span>
+                    )}
+                    {inv.requires_special_approval && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-100 text-violet-800">
+                        Admin
+                      </span>
+                    )}
+                    {inv.confidence_score !== null && (
+                      <ConfidencePill score={inv.confidence_score} />
+                    )}
+                  </div>
                 </div>
               </div>
             </Link>

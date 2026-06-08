@@ -14,12 +14,14 @@ import { cn, formatMoney } from '../lib/utils';
 
 const STATUS_LABEL: Record<InvoiceStatus, string> = {
   pending: 'Pendiente',
+  observed: 'Observada',
   approved: 'Aprobada',
   rejected: 'Rechazada',
 };
 
 const STATUS_TONE: Record<InvoiceStatus, string> = {
   pending: 'bg-amber-50 text-amber-800 ring-amber-200',
+  observed: 'bg-violet-50 text-violet-800 ring-violet-200',
   approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   rejected: 'bg-rose-50 text-rose-700 ring-rose-200',
 };
@@ -157,7 +159,7 @@ export default function FacturaDetailPage() {
     );
   }
 
-  const readOnly = invoice.status !== 'pending';
+  const readOnly = invoice.status !== 'pending' && invoice.status !== 'observed';
   const confidence = invoice.confidence_score ?? null;
 
   return (
@@ -220,9 +222,40 @@ export default function FacturaDetailPage() {
               <Field label="Total" type="number" value={form.total} onChange={(v) => update('total', v)} readOnly={readOnly} />
             </div>
             <ItemsTable extractedData={invoice.extracted_data} />
+
+            {/* Categoría de gasto */}
+            {invoice.expense_category && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs font-medium text-slate-600">Categoría:</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200">
+                  {invoice.expense_category === 'alimentacion' ? 'Alimentación' : invoice.expense_category.charAt(0).toUpperCase() + invoice.expense_category.slice(1)}
+                </span>
+              </div>
+            )}
+
+            {/* Alertas de observación */}
+            {(invoice.requires_special_approval || invoice.reported_late || !invoice.vendor_nit) && (
+              <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                {!invoice.vendor_nit && (
+                  <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2.5 py-1.5">
+                    ⚠️ Sin NIT — requiere aprobación de admin con justificación
+                  </div>
+                )}
+                {invoice.reported_late && (
+                  <div className="flex items-center gap-2 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2.5 py-1.5">
+                    ⏰ Reporte tardío — la factura fue reportada más de 24h después de la compra
+                  </div>
+                )}
+                {invoice.requires_special_approval && invoice.status === 'observed' && (
+                  <div className="flex items-center gap-2 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded px-2.5 py-1.5">
+                    🔒 Requiere aprobación de admin (soporte débil, sin NIT, categoría restringida o reporte tardío)
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {invoice.status === 'pending' ? (
+          {(invoice.status === 'pending' || invoice.status === 'observed') ? (
             <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
               <h3 className="text-sm font-semibold text-slate-900">Decisión</h3>
               <div>

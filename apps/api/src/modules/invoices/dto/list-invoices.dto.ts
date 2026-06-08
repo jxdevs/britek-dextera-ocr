@@ -3,7 +3,7 @@ import type { InvoiceStatus } from '../../../database/models/invoice.model';
 
 export class ListInvoicesDto {
   @IsOptional()
-  @IsIn(['pending', 'approved', 'rejected'])
+  @IsIn(['pending', 'observed', 'approved', 'rejected'])
   status?: InvoiceStatus;
 
   @IsOptional()

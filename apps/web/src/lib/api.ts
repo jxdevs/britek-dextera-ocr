@@ -130,7 +130,7 @@ export async function fetchBlobWithAuth(path: string): Promise<Blob> {
 // ============ Petty cash ============
 
 export type BoxType = 'individual' | 'shared';
-export type BoxStatus = 'open' | 'closed';
+export type BoxStatus = 'open' | 'closed' | 'blocked';
 
 export interface BoxWorker {
   id: string;
@@ -152,6 +152,7 @@ export interface PettyCashBox {
   cost_center: string | null;
   opened_at: string;
   closed_at: string | null;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
   workers: BoxWorker[];
@@ -166,7 +167,12 @@ export interface CreateBoxInput {
   cost_center: string;
   worker_ids: string[];
   primary_worker_id?: string;
+  exception_justification?: string;
 }
+
+export type ExpenseCategory =
+  | 'combustible' | 'transporte' | 'peajes' | 'parqueaderos'
+  | 'materiales' | 'consumibles' | 'alimentacion' | 'otro';
 
 export interface Movement {
   id: string;
@@ -175,8 +181,11 @@ export interface Movement {
   invoice_number: string | null;
   invoice_date: string | null;
   total: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: InvoiceStatus;
   submitted_at: string;
+  expense_category: ExpenseCategory | null;
+  requires_special_approval: boolean;
+  reported_late: boolean;
   approvals: Array<{
     id: string;
     action: 'approve' | 'reject';
@@ -231,7 +240,7 @@ export const pettyCash = {
 
 // ============ Invoices ============
 
-export type InvoiceStatus = 'pending' | 'approved' | 'rejected';
+export type InvoiceStatus = 'pending' | 'observed' | 'approved' | 'rejected';
 
 export interface InvoiceWorker {
   id: string;
@@ -273,6 +282,9 @@ export interface Invoice {
   currency: string | null;
   extracted_data: Record<string, unknown> | null;
   confidence_score: number | null;
+  expense_category: ExpenseCategory | null;
+  requires_special_approval: boolean;
+  reported_late: boolean;
   submitted_at: string;
   created_at: string;
   updated_at: string;

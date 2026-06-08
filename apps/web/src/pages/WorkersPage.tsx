@@ -15,7 +15,6 @@ const EMPTY: CreateWorkerInput = {
   phone: '',
   email: '',
   role: 'worker',
-  password: '',
 };
 
 const ROLE_LABEL: Record<WorkerRole, string> = {
@@ -77,7 +76,7 @@ export default function WorkersPage() {
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
       <div className="flex items-end justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Residentes</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Usuarios</h2>
           <p className="text-sm text-slate-600">
             Admins y aprobadores entran al dashboard; los residentes envían facturas por WhatsApp.
           </p>
@@ -104,7 +103,7 @@ export default function WorkersPage() {
             <Loader2 className="size-5 animate-spin text-slate-400" />
           </div>
         ) : items.length === 0 ? (
-          <div className="py-12 text-center text-sm text-slate-500">Sin residentes aún.</div>
+          <div className="py-12 text-center text-sm text-slate-500">Sin usuarios aún.</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
@@ -188,14 +187,12 @@ function WorkerModal({
           phone: initial.phone,
           email: initial.email ?? '',
           role: initial.role,
-          password: '',
         }
       : { ...EMPTY },
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const requiresPassword = (form.role === 'admin' || form.role === 'approver') && !initial;
 
   const update = <K extends keyof CreateWorkerInput>(key: K, value: CreateWorkerInput[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -239,7 +236,7 @@ function WorkerModal({
       <div className="bg-white rounded-lg shadow-xl w-full max-w-lg">
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
           <h3 className="text-sm font-semibold text-slate-900">
-            {initial ? 'Editar residente' : 'Nuevo residente'}
+            {initial ? 'Editar usuario' : 'Nuevo usuario'}
           </h3>
           <button onClick={onClose} className="p-1 rounded hover:bg-slate-100">
             <X className="size-4" />
@@ -268,31 +265,17 @@ function WorkerModal({
               onChange={(v) => update('email', v)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-slate-600">Rol</label>
-              <select
-                value={form.role}
-                onChange={(e) => update('role', e.target.value as WorkerRole)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
-                <option value="worker">Residente</option>
-                <option value="approver">Aprobador</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <Field
-              label={
-                initial
-                  ? 'Contraseña (dejar vacío para no cambiar)'
-                  : requiresPassword
-                    ? 'Contraseña (requerida)'
-                    : 'Contraseña (opcional)'
-              }
-              type="password"
-              value={form.password ?? ''}
-              onChange={(v) => update('password', v)}
-            />
+          <div>
+            <label className="text-xs font-medium text-slate-600">Rol</label>
+            <select
+              value={form.role}
+              onChange={(e) => update('role', e.target.value as WorkerRole)}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+              <option value="worker">Residente</option>
+              <option value="approver">Aprobador</option>
+              <option value="admin">Admin</option>
+            </select>
           </div>
 
           {error && (

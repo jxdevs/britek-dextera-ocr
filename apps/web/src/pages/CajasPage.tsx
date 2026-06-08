@@ -92,8 +92,8 @@ function BoxCard({ box }: { box: PettyCashBox }) {
   const primary = box.workers.find((w) => w.BoxAssignment.is_primary);
   const others = box.workers.filter((w) => !w.BoxAssignment.is_primary);
 
-  const deadline = box.status === 'open' ? getBoxDeadlineInfo(box.opened_at) : null;
-  const consumption = box.status === 'open' ? getBoxConsumptionAlert(box.initial_amount, box.current_balance) : null;
+  const deadline = (box.status === 'open' || box.status === 'blocked') ? getBoxDeadlineInfo(box.opened_at) : null;
+  const consumption = (box.status === 'open' || box.status === 'blocked') ? getBoxConsumptionAlert(box.initial_amount, box.current_balance) : null;
 
   return (
     <Link
@@ -130,10 +130,12 @@ function BoxCard({ box }: { box: PettyCashBox }) {
                 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ring-1 ring-inset',
                 box.status === 'open'
                   ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                  : 'bg-slate-100 text-slate-600 ring-slate-200',
+                  : box.status === 'blocked'
+                    ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                    : 'bg-slate-100 text-slate-600 ring-slate-200',
               )}
             >
-              {box.status === 'open' ? 'Abierta' : 'Cerrada'}
+              {box.status === 'open' ? 'Abierta' : box.status === 'blocked' ? 'Bloqueada' : 'Cerrada'}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">

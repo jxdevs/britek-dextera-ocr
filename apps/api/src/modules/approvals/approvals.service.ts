@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -27,6 +28,7 @@ const EDITABLE_FIELDS = [
   'iva',
   'total',
   'currency',
+  'expense_category',
 ] as const;
 
 type EditableField = (typeof EDITABLE_FIELDS)[number];
@@ -54,8 +56,51 @@ export class ApprovalsService {
         transaction: t,
       });
       if (!invoice) throw new NotFoundException('Factura no encontrada');
-      if (invoice.status !== 'pending') {
+
+      // Permitir decidir sobre facturas 'pending' u 'observed'
+      if (invoice.status !== 'pending' && invoice.status !== 'observed') {
         throw new ConflictException('La factura ya fue procesada');
+      }
+
+      // ── Regla 5/7/8b: Si la factura requiere aprobación especial, solo admin puede aprobar ──
+      if (dto.action === 'approve') {
+        // Facturas observadas → solo admin
+        if (invoice.status === 'observed' || invoice.requires_special_approval) {
+          if (user.role !== 'admin') {
+            throw new ForbiddenException(
+              'Esta factura requiere aprobación de un admin (observada por: soporte débil, sin NIT, categoría restringida o reporte tardío).',
+            );
+          }
+          if (!dto.comments?.trim()) {
+            throw new BadRequestException(
+              'Las facturas observadas requieren un comentario de justificación al aprobar.',
+            );
+          }
+        }
+
+        // Regla 7: Sin NIT → solo admin con justificación
+        const finalNit = (editedFields.vendor_nit as string | undefined) ?? invoice.vendor_nit;
+        if (!finalNit) {
+          if (user.role !== 'admin') {
+            throw new ForbiddenException(
+              'Facturas sin NIT solo pueden ser aprobadas por un admin.',
+            );
+          }
+          if (!dto.comments?.trim()) {
+            throw new BadRequestException(
+              'Se requiere un comentario justificando la aprobación de una factura sin NIT.',
+            );
+          }
+        }
+
+        // Regla 5: Confidence bajo → solo admin
+        if (invoice.confidence_score !== null && invoice.confidence_score < 0.6) {
+          if (user.role !== 'admin') {
+            throw new ForbiddenException(
+              'Facturas con confianza baja (<60%) solo pueden ser aprobadas por un admin.',
+            );
+          }
+        }
       }
 
       if (dto.action === 'reject') {
@@ -92,7 +137,7 @@ export class ApprovalsService {
           entity: 'invoice',
           entityId: invoice.id,
           entityLabel: `${invoice.vendor_name ?? 'Sin proveedor'} - ${invoice.invoice_number ?? 'S/N'}`,
-          before: { status: 'pending' },
+          before: { status: invoice.status },
           after: { status: 'rejected', comments: dto.comments ?? null, balance_restored: true },
         });
 
@@ -100,9 +145,6 @@ export class ApprovalsService {
       }
 
       // ── Aprobar / Legalizar ──
-      // El saldo ya se descontó cuando el residente subió la factura.
-      // Aquí solo validamos y legalizamos. Si el aprobador editó el total,
-      // ajustamos la diferencia en el saldo.
 
       if (!invoice.box_id) {
         throw new BadRequestException(
@@ -115,6 +157,18 @@ export class ApprovalsService {
         lock: t.LOCK.UPDATE,
       });
       if (!box) throw new NotFoundException('Caja no encontrada');
+
+      // ── Regla 4b: No se puede aprobar en caja bloqueada ──
+      if (box.status === 'blocked') {
+        throw new ConflictException(
+          `La caja "${box.code}" está bloqueada por vencimiento de plazo. No se pueden aprobar facturas hasta que un admin la cierre o resuelva.`,
+        );
+      }
+      if (box.status === 'closed') {
+        throw new ConflictException(
+          `La caja "${box.code}" está cerrada. No se pueden aprobar más facturas.`,
+        );
+      }
 
       const originalTotal = parseFloat(invoice.total);
       const finalTotal = parseFloat(
@@ -157,7 +211,7 @@ export class ApprovalsService {
         entity: 'invoice',
         entityId: invoice.id,
         entityLabel: `${invoice.vendor_name ?? 'Sin proveedor'} - ${invoice.invoice_number ?? 'S/N'}`,
-        before: { status: 'pending', total: invoice.total },
+        before: { status: invoice.status, total: invoice.total },
         after: { status: 'approved', total: finalTotal.toFixed(2) },
       });
     });

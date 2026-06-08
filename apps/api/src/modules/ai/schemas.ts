@@ -41,6 +41,13 @@ export const invoiceResponseSchema = {
       nullable: true,
       description: 'Código ISO de moneda (COP, USD, etc.). Asume COP si no aparece.',
     },
+    expense_category: {
+      type: Type.STRING,
+      description:
+        'Categoría del gasto inferida del contenido de la factura. ' +
+        'Valores posibles: combustible, transporte, peajes, parqueaderos, materiales, consumibles, alimentacion, otro. ' +
+        'Clasifica según el tipo de bien o servicio facturado.',
+    },
     items: {
       type: Type.ARRAY,
       description: 'Líneas de la factura. Vacío si no se distinguen.',
@@ -65,7 +72,7 @@ export const invoiceResponseSchema = {
       description: 'Observaciones cortas: campos ilegibles, anomalías, advertencias.',
     },
   },
-  required: ['vendor_name', 'total', 'confidence_score'],
+  required: ['vendor_name', 'total', 'confidence_score', 'expense_category'],
 };
 
 export const extractionPrompt = `Eres un asistente experto en extracción de datos de facturas y comprobantes de venta colombianos.
@@ -79,7 +86,16 @@ Recibirás una imagen. Tu tarea:
    - El NIT no debe contener puntos. Incluye el dígito de verificación con guion si aparece (ej: 900123456-7).
    - Si un campo no es legible o no aparece, déjalo en null en vez de inventar.
    - "items" puede ser una lista vacía si no se distinguen líneas.
-3. Calibra confidence_score honestamente:
+3. Clasifica el gasto en expense_category según el contenido:
+   - "combustible" → gasolina, ACPM, gas vehicular.
+   - "transporte" → taxis, plataformas de transporte, fletes.
+   - "peajes" → peajes de carreteras.
+   - "parqueaderos" → estacionamientos, parqueaderos.
+   - "materiales" → materiales de construcción, ferretería, insumos de obra.
+   - "consumibles" → papelería, aseo, útiles de oficina.
+   - "alimentacion" → restaurantes, cafeterías, bebidas, alimentos.
+   - "otro" → cualquier gasto que no encaje en las anteriores.
+4. Calibra confidence_score honestamente:
    - Si falta el NIT (vendor_nit es null), el confidence_score NUNCA puede superar 0.10. El NIT es primordial.
    - >= 0.85 → todos los campos clave legibles y consistentes (subtotal + iva ≈ total), NIT presente.
    - 0.6 – 0.85 → algunos campos dudosos o falta uno secundario, NIT presente.

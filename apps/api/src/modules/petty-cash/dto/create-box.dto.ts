@@ -7,7 +7,6 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Max,
   Min,
   MinLength,
 } from 'class-validator';
@@ -27,7 +26,7 @@ export class CreateBoxDto {
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
-  @Max(1_000_000, { message: 'El monto inicial no puede superar $1.000.000' })
+  // Nota: el tope de $1.000.000 se valida en el service con lógica de excepciones
   initial_amount!: number;
 
   @IsString()
@@ -47,4 +46,10 @@ export class CreateBoxDto {
   @IsOptional()
   @IsUUID('4')
   primary_worker_id?: string;
+
+  /** Requerido cuando initial_amount > $1.000.000 */
+  @IsOptional()
+  @IsString()
+  @MinLength(10, { message: 'La justificación de excepción debe tener al menos 10 caracteres' })
+  exception_justification?: string;
 }

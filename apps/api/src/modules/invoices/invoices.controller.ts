@@ -14,10 +14,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import * as fs from 'fs';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { StorageService } from '../storage/storage.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 import { InvoicesService } from './invoices.service';
@@ -27,7 +27,10 @@ const MAX_BYTES = 10 * 1024 * 1024;
 @Controller('invoices')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InvoicesController {
-  constructor(private readonly service: InvoicesService) {}
+  constructor(
+    private readonly service: InvoicesService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Get()
   @Roles('admin', 'approver')
@@ -51,8 +54,9 @@ export class InvoicesController {
   @Roles('admin', 'approver')
   @Header('Cache-Control', 'private, max-age=300')
   async image(@Param('id', new ParseUUIDPipe()) id: string): Promise<StreamableFile> {
-    const { absolutePath, mimeType } = await this.service.getImagePath(id);
-    return new StreamableFile(fs.createReadStream(absolutePath), { type: mimeType });
+    const { imageUrl, mimeType } = await this.service.getImagePath(id);
+    const stream = await this.storage.getStream(imageUrl);
+    return new StreamableFile(stream, { type: mimeType });
   }
 
   @Post()

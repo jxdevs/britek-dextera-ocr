@@ -13,11 +13,21 @@ import {
   PettyCashBox,
   Worker,
 } from '../../database/models';
+import type { ExpenseCategory } from '../../database/models/invoice.model';
 import { GeminiService } from '../ai/gemini.service';
 import { StorageService } from '../storage/storage.service';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+
+/** Categorías que requieren aprobación especial (admin) */
+const RESTRICTED_CATEGORIES: ExpenseCategory[] = ['alimentacion'];
+
+/** Categorías válidas para el campo expense_category */
+const VALID_CATEGORIES: ExpenseCategory[] = [
+  'combustible', 'transporte', 'peajes', 'parqueaderos',
+  'materiales', 'consumibles', 'alimentacion', 'otro',
+];
 
 @Injectable()
 export class InvoicesService {
@@ -68,21 +78,77 @@ export class InvoicesService {
       confidenceScore = Math.min(confidenceScore, 0.10);
     }
 
+    // ── Categoría de gasto (Regla 3) ──
+    const rawCategory = toStringOrNull(data.expense_category);
+    const expenseCategory: ExpenseCategory | null =
+      rawCategory && VALID_CATEGORIES.includes(rawCategory as ExpenseCategory)
+        ? (rawCategory as ExpenseCategory)
+        : 'otro';
+
+    // ── Determinar si requiere aprobación especial ──
+    let requiresSpecialApproval = false;
+    const reasons: string[] = [];
+
+    // Sin NIT → requiere admin
+    if (!vendorNit) {
+      requiresSpecialApproval = true;
+      reasons.push('Sin NIT');
+    }
+
+    // Confidence bajo → requiere admin
+    if (confidenceScore !== null && confidenceScore < 0.6) {
+      requiresSpecialApproval = true;
+      reasons.push('Confianza baja');
+    }
+
+    // Categoría restringida (alimentación) → requiere admin
+    if (expenseCategory && RESTRICTED_CATEGORIES.includes(expenseCategory)) {
+      requiresSpecialApproval = true;
+      reasons.push(`Categoría restringida: ${expenseCategory}`);
+    }
+
+    // ── Reporte tardío (Regla 4a) ──
+    const invoiceDateStr = toStringOrNull(data.invoice_date);
+    let reportedLate = false;
+    if (invoiceDateStr) {
+      const invoiceDate = new Date(invoiceDateStr);
+      const now = new Date();
+      const diffMs = now.getTime() - invoiceDate.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+      if (diffHours > 24) {
+        reportedLate = true;
+        requiresSpecialApproval = true;
+        reasons.push('Reporte tardío (>24h)');
+      }
+    }
+
+    // ── Status: observed si requiere aprobación especial (Regla 8b) ──
+    const status = requiresSpecialApproval ? 'observed' : 'pending';
+
+    if (reasons.length > 0) {
+      this.logger.log(
+        `Factura marcada como "${status}" por: ${reasons.join(', ')}`,
+      );
+    }
+
     const invoice = await this.invoices.create({
       worker_id: workerId,
       box_id: null,
       image_url: imageUrl,
-      status: 'pending',
+      status,
       vendor_nit: vendorNit,
       vendor_name: toStringOrNull(data.vendor_name),
       invoice_number: toStringOrNull(data.invoice_number),
-      invoice_date: toStringOrNull(data.invoice_date),
+      invoice_date: invoiceDateStr,
       subtotal: toDecimalOrNull(data.subtotal),
       iva: toDecimalOrNull(data.iva),
       total: toDecimalOrNull(data.total) ?? '0',
       currency: toStringOrNull(data.currency) ?? 'COP',
       extracted_data: extraction.extracted,
       confidence_score: confidenceScore,
+      expense_category: expenseCategory,
+      requires_special_approval: requiresSpecialApproval,
+      reported_late: reportedLate,
       submitted_at: new Date(),
     });
 
@@ -130,6 +196,7 @@ export class InvoicesService {
 
     const total = parseFloat(invoice.total);
 
+    // Solo cajas abiertas (no bloqueadas ni cerradas)
     const boxes = await this.boxes.findAll({
       where: { status: 'open' },
       include: [
@@ -157,7 +224,7 @@ export class InvoicesService {
     const invoice = await this.invoices.findByPk(id);
     if (!invoice) throw new NotFoundException('Factura no encontrada');
     return {
-      absolutePath: this.storage.absolute(invoice.image_url),
+      imageUrl: invoice.image_url,
       mimeType: this.storage.mimeTypeFromPath(invoice.image_url),
     };
   }

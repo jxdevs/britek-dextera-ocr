@@ -105,10 +105,12 @@ export default function CajaDetailPage() {
                 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ring-1 ring-inset',
                 box.status === 'open'
                   ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                  : 'bg-slate-100 text-slate-600 ring-slate-200',
+                  : box.status === 'blocked'
+                    ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                    : 'bg-slate-100 text-slate-600 ring-slate-200',
               )}
             >
-              {box.status === 'open' ? 'Abierta' : 'Cerrada'}
+              {box.status === 'open' ? 'Abierta' : box.status === 'blocked' ? 'Bloqueada' : 'Cerrada'}
             </span>
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ring-1 ring-inset bg-sky-50 text-sky-700 ring-sky-200">
               {box.type === 'individual' ? 'Individual' : 'Compartida'}
@@ -116,6 +118,7 @@ export default function CajaDetailPage() {
           </div>
           <p className="text-sm text-slate-600 mt-1">
             {box.code} · abierta el {new Date(box.opened_at).toLocaleDateString('es-CO')}
+            {box.expires_at && ` · vence el ${new Date(box.expires_at).toLocaleDateString('es-CO')}`}
             {box.closed_at && ` · cerrada el ${new Date(box.closed_at).toLocaleDateString('es-CO')}`}
           </p>
           {(box.project_name || box.cost_center) && (
@@ -224,6 +227,19 @@ export default function CajaDetailPage() {
           </div>
         );
       })()}
+
+      {/* Alerta de caja bloqueada */}
+      {box.status === 'blocked' && (
+        <div className="flex items-center gap-3 rounded-lg border px-4 py-3 bg-rose-50 border-rose-300 text-rose-800">
+          <Lock className="size-5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">Caja bloqueada por vencimiento de plazo</p>
+            <p className="text-xs mt-0.5 opacity-75">
+              Esta caja superó el plazo de 7 días. No se pueden aprobar facturas hasta que un admin la cierre.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Semáforo de plazo — solo para cajas abiertas */}
       {box.status === 'open' && (() => {
@@ -341,9 +357,11 @@ export default function CajaDetailPage() {
                           ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
                           : m.status === 'rejected'
                             ? 'bg-rose-50 text-rose-700 ring-rose-200'
-                            : 'bg-amber-50 text-amber-700 ring-amber-200',
+                            : m.status === 'observed'
+                              ? 'bg-violet-50 text-violet-700 ring-violet-200'
+                              : 'bg-amber-50 text-amber-700 ring-amber-200',
                       )}>
-                        {m.status === 'approved' ? 'Legalizada' : m.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
+                        {m.status === 'approved' ? 'Legalizada' : m.status === 'rejected' ? 'Rechazada' : m.status === 'observed' ? 'Observada' : 'Pendiente'}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-slate-700">
@@ -362,7 +380,7 @@ export default function CajaDetailPage() {
                       <td className="px-4 py-2">
                         <div className="flex items-center justify-center gap-1">
                           {/* Aprobar / Rechazar — solo para pendientes */}
-                          {m.status === 'pending' && canApprove && (
+                          {(m.status === 'pending' || m.status === 'observed') && canApprove && (
                             <>
                               <button
                                 type="button"

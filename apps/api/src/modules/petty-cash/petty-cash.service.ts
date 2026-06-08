@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { UniqueConstraintError } from 'sequelize';
+import { Op, UniqueConstraintError } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import {
   Approval,
@@ -22,6 +22,11 @@ import { StorageService } from '../storage/storage.service';
 import { AssignWorkersDto } from './dto/assign-workers.dto';
 import { CreateBoxDto } from './dto/create-box.dto';
 import { UpdateBoxDto } from './dto/update-box.dto';
+
+/** Tope máximo de caja menor sin excepción */
+const MAX_BOX_AMOUNT = 1_000_000;
+/** Días de plazo para legalizar una caja */
+const BOX_DEADLINE_DAYS = 7;
 
 @Injectable()
 export class PettyCashService {
@@ -38,7 +43,10 @@ export class PettyCashService {
     @InjectModel(Approval) private readonly approvals: typeof Approval,
   ) {}
 
-  list() {
+  async list() {
+    // Bloqueo lazy: auto-bloquear cajas vencidas al listar
+    await this.blockExpiredBoxes();
+
     return this.boxes.findAll({
       include: [
         {
@@ -55,6 +63,9 @@ export class PettyCashService {
   }
 
   async findOne(id: string) {
+    // Bloqueo lazy para esta caja específica
+    await this.blockExpiredBoxById(id);
+
     const box = await this.boxes.findByPk(id, {
       include: [
         {
@@ -75,13 +86,28 @@ export class PettyCashService {
         'primary_worker_id debe estar dentro de worker_ids',
       );
     }
-    if (dto.initial_amount > 1_000_000) {
-      throw new BadRequestException(
-        'El monto inicial no puede superar $1.000.000',
-      );
+
+    // ── Regla 2b: Tope de $1.000.000 con excepciones ──
+    if (dto.initial_amount > MAX_BOX_AMOUNT) {
+      if (user.role !== 'admin') {
+        throw new ForbiddenException(
+          `El monto supera $${MAX_BOX_AMOUNT.toLocaleString('es-CO')}. Solo un admin puede crear cajas con excepción al tope.`,
+        );
+      }
+      if (!dto.exception_justification) {
+        throw new BadRequestException(
+          `El monto supera $${MAX_BOX_AMOUNT.toLocaleString('es-CO')}. Debe incluir una justificación (exception_justification).`,
+        );
+      }
     }
+
     await this.assertWorkersExist(dto.worker_ids);
+    // ── Regla 1b: No abrir si hay caja abierta O cajas con facturas sin legalizar ──
     await this.assertNoOpenBoxForWorkers(dto.worker_ids);
+    await this.assertPreviousBoxesFullyLegalized(dto.worker_ids);
+
+    const openedAt = new Date();
+    const expiresAt = new Date(openedAt.getTime() + BOX_DEADLINE_DAYS * 24 * 60 * 60 * 1000);
 
     try {
       const box = await this.sequelize.transaction(async (t) => {
@@ -94,7 +120,8 @@ export class PettyCashService {
             current_balance: dto.initial_amount.toFixed(2),
             project_name: dto.project_name,
             cost_center: dto.cost_center,
-            opened_at: new Date(),
+            opened_at: openedAt,
+            expires_at: expiresAt,
             status: 'open',
             created_by: user.id,
           },
@@ -116,13 +143,22 @@ export class PettyCashService {
 
       const result = await this.findOne(box.id);
 
+      const auditAfter: Record<string, unknown> = {
+        code: dto.code, name: dto.name, type: dto.type,
+        initial_amount: dto.initial_amount, expires_at: expiresAt.toISOString(),
+      };
+      if (dto.initial_amount > MAX_BOX_AMOUNT) {
+        auditAfter.exception_justification = dto.exception_justification;
+        auditAfter.exception_approved_by = user.name;
+      }
+
       this.audit.log({
         user,
         action: 'create',
         entity: 'petty_cash_box',
         entityId: box.id,
         entityLabel: `${dto.name} - ${dto.code}`,
-        after: { code: dto.code, name: dto.name, type: dto.type, initial_amount: dto.initial_amount },
+        after: auditAfter,
       });
 
       return result;
@@ -138,6 +174,7 @@ export class PettyCashService {
       throw new ConflictException('La caja ya estaba cerrada');
     }
     const beforeBalance = box.current_balance;
+    const beforeStatus = box.status;
     await box.update({ status: 'closed', closed_at: new Date() });
 
     this.audit.log({
@@ -146,7 +183,7 @@ export class PettyCashService {
       entity: 'petty_cash_box',
       entityId: id,
       entityLabel: `${box.name} - ${box.code}`,
-      before: { status: 'open', current_balance: beforeBalance },
+      before: { status: beforeStatus, current_balance: beforeBalance },
       after: { status: 'closed', closed_at: new Date().toISOString() },
     });
 
@@ -207,11 +244,12 @@ export class PettyCashService {
     return this.findOne(id);
   }
 
+  // ── Regla 1c: Inmutabilidad de asignación ──
   async assign(id: string, dto: AssignWorkersDto) {
     const box = await this.boxes.findByPk(id);
     if (!box) throw new NotFoundException('Caja no encontrada');
     if (box.status !== 'open') {
-      throw new ConflictException('No se pueden modificar asignaciones de una caja cerrada');
+      throw new ConflictException('No se pueden modificar asignaciones de una caja cerrada o bloqueada');
     }
     this.validateTypeVsWorkers(box.type, dto.worker_ids);
     if (dto.primary_worker_id && !dto.worker_ids.includes(dto.primary_worker_id)) {
@@ -220,6 +258,14 @@ export class PettyCashService {
       );
     }
     await this.assertWorkersExist(dto.worker_ids);
+
+    // Verificar que la caja no tenga movimientos — inmutabilidad de asignación
+    const invoiceCount = await this.invoices.count({ where: { box_id: id } });
+    if (invoiceCount > 0) {
+      throw new ConflictException(
+        'No se pueden reasignar residentes de una caja que ya tiene movimientos registrados.',
+      );
+    }
 
     await this.sequelize.transaction(async (t) => {
       await this.assignments.destroy({ where: { box_id: id }, transaction: t });
@@ -245,7 +291,8 @@ export class PettyCashService {
       where: { box_id: id },
       attributes: [
         'id', 'vendor_name', 'vendor_nit', 'invoice_number', 'invoice_date',
-        'total', 'status', 'submitted_at',
+        'total', 'status', 'submitted_at', 'expense_category',
+        'requires_special_approval', 'reported_late',
       ],
       include: [
         {
@@ -366,13 +413,7 @@ export class PettyCashService {
       // 6. Delete files from storage (best-effort, after DB commit is guaranteed)
       for (const inv of boxInvoices) {
         if (inv.image_url) {
-          try {
-            const fs = await import('fs');
-            const abs = this.storage.absolute(inv.image_url);
-            await fs.promises.unlink(abs);
-          } catch (err) {
-            this.logger.warn(`No se pudo eliminar archivo ${inv.image_url}: ${err}`);
-          }
+          await this.storage.delete(inv.image_url);
         }
       }
     });
@@ -388,6 +429,10 @@ export class PettyCashService {
 
     return { id, deleted: true };
   }
+
+  // ════════════════════════════════════════════════════════════════════
+  // VALIDACIONES PRIVADAS
+  // ════════════════════════════════════════════════════════════════════
 
   private validateTypeVsWorkers(type: 'individual' | 'shared', worker_ids: string[]) {
     if (type === 'individual' && worker_ids.length !== 1) {
@@ -407,7 +452,7 @@ export class PettyCashService {
   private async assertNoOpenBoxForWorkers(workerIds: string[]) {
     // Find open boxes that have any of the given workers assigned
     const openBoxes = await this.boxes.findAll({
-      where: { status: 'open' },
+      where: { status: { [Op.in]: ['open', 'blocked'] } },
       attributes: ['id', 'code', 'name'],
       include: [
         {
@@ -428,6 +473,61 @@ export class PettyCashService {
       throw new ConflictException(
         `El residente ${uniqueNames} ya tiene una caja abierta (${boxCode}). Debe cerrarla antes de abrir otra.`,
       );
+    }
+  }
+
+  // ── Regla 1b: Verificar que cajas cerradas anteriores estén 100% legalizadas ──
+  private async assertPreviousBoxesFullyLegalized(workerIds: string[]) {
+    const closedBoxesWithPending = await this.boxes.findAll({
+      where: { status: 'closed' },
+      attributes: ['id', 'code', 'name'],
+      include: [
+        {
+          model: Worker,
+          where: { id: workerIds },
+          attributes: ['id', 'name'],
+          through: { attributes: [] },
+          required: true,
+        },
+        {
+          model: Invoice,
+          where: { status: { [Op.in]: ['pending', 'observed'] } },
+          attributes: ['id'],
+          required: true,
+        },
+      ],
+    });
+
+    if (closedBoxesWithPending.length > 0) {
+      const boxCode = closedBoxesWithPending[0].code;
+      throw new ConflictException(
+        `La caja cerrada "${boxCode}" tiene facturas pendientes de legalizar. Debe legalizar el 100% antes de abrir una nueva caja.`,
+      );
+    }
+  }
+
+  // ── Regla 4b: Bloqueo lazy de cajas vencidas ──
+  private async blockExpiredBoxes() {
+    const now = new Date();
+    const [count] = await this.boxes.update(
+      { status: 'blocked' },
+      {
+        where: {
+          status: 'open',
+          expires_at: { [Op.ne]: null, [Op.lt]: now },
+        },
+      },
+    );
+    if (count > 0) {
+      this.logger.warn(`Auto-bloqueadas ${count} caja(s) por vencimiento de plazo.`);
+    }
+  }
+
+  private async blockExpiredBoxById(id: string) {
+    const box = await this.boxes.findByPk(id);
+    if (box && box.status === 'open' && box.expires_at && new Date(box.expires_at) < new Date()) {
+      await box.update({ status: 'blocked' });
+      this.logger.warn(`Auto-bloqueada caja ${box.code} por vencimiento de plazo.`);
     }
   }
 
