@@ -166,10 +166,10 @@ export default function FacturaDetailPage() {
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <button
-          onClick={() => navigate('/facturas')}
+          onClick={() => navigate(-1)}
           className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900"
         >
-          <ArrowLeft className="size-4" /> Volver a facturas
+          <ArrowLeft className="size-4" /> Volver
         </button>
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span>
