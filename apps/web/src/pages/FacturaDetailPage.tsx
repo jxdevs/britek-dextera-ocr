@@ -234,13 +234,8 @@ export default function FacturaDetailPage() {
             )}
 
             {/* Alertas de observación */}
-            {(invoice.requires_special_approval || invoice.reported_late || !invoice.vendor_nit) && (
+            {(invoice.requires_special_approval || invoice.reported_late) && (
               <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                {!invoice.vendor_nit && (
-                  <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2.5 py-1.5">
-                    ⚠️ Sin NIT — requiere aprobación de admin con justificación
-                  </div>
-                )}
                 {invoice.reported_late && (
                   <div className="flex items-center gap-2 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2.5 py-1.5">
                     ⏰ Reporte tardío — la factura fue reportada más de 24h después de la compra
@@ -248,7 +243,15 @@ export default function FacturaDetailPage() {
                 )}
                 {invoice.requires_special_approval && invoice.status === 'observed' && (
                   <div className="flex items-center gap-2 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded px-2.5 py-1.5">
-                    🔒 Requiere aprobación de admin (soporte débil, sin NIT, categoría restringida o reporte tardío)
+                    🔒 Requiere aprobación de admin
+                    {(() => {
+                      const reasons: string[] = [];
+                      if (!invoice.vendor_nit) reasons.push('sin NIT');
+                      if (invoice.confidence_score !== null && invoice.confidence_score < 0.6) reasons.push('soporte débil');
+                      if (invoice.expense_category === 'alimentacion') reasons.push('categoría restringida');
+                      if (invoice.reported_late) reasons.push('reporte tardío');
+                      return reasons.length > 0 ? ` (${reasons.join(', ')})` : '';
+                    })()}
                   </div>
                 )}
               </div>

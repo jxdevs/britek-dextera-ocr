@@ -146,13 +146,22 @@ export class ApprovalsService {
 
       // ── Aprobar / Legalizar ──
 
+      // Track whether the box was just assigned (balance NOT yet deducted)
+      // vs pre-assigned from WhatsApp (balance already deducted)
+      const boxWasPreAssigned = !!invoice.box_id;
+
+      // Si la factura no tiene caja asignada, usar la que envió el aprobador
       if (!invoice.box_id) {
-        throw new BadRequestException(
-          'La factura no tiene caja asignada. El residente debe subirla desde WhatsApp.',
-        );
+        if (!dto.box_id) {
+          throw new BadRequestException(
+            'Debes seleccionar una caja para aprobar esta factura.',
+          );
+        }
+        await invoice.update({ box_id: dto.box_id }, { transaction: t });
       }
 
-      const box = await this.boxes.findByPk(invoice.box_id, {
+      const resolvedBoxId = invoice.box_id!;
+      const box = await this.boxes.findByPk(resolvedBoxId, {
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
@@ -178,12 +187,26 @@ export class ApprovalsService {
         throw new BadRequestException('El total debe ser un número positivo');
       }
 
-      // Si el aprobador editó el total, ajustar la diferencia en el saldo
       let newBalance = box.current_balance;
-      if (Math.abs(finalTotal - originalTotal) > 0.01) {
-        const diff = originalTotal - finalTotal; // positivo = aprobador bajó el total → devolver
+
+      if (boxWasPreAssigned) {
+        // WhatsApp flow: balance was already deducted at upload time.
+        // Only adjust if the approver edited the total.
+        if (Math.abs(finalTotal - originalTotal) > 0.01) {
+          const diff = originalTotal - finalTotal; // positive = approver lowered total → refund
+          const currentBalance = parseFloat(box.current_balance);
+          newBalance = (currentBalance + diff).toFixed(2);
+          await box.update({ current_balance: newBalance }, { transaction: t });
+        }
+      } else {
+        // Web flow: balance was NOT deducted yet. Deduct the final total now.
         const currentBalance = parseFloat(box.current_balance);
-        newBalance = (currentBalance + diff).toFixed(2);
+        if (currentBalance < finalTotal) {
+          throw new BadRequestException(
+            `Saldo insuficiente en la caja "${box.code}". Disponible: $${currentBalance.toFixed(2)}, requerido: $${finalTotal.toFixed(2)}.`,
+          );
+        }
+        newBalance = (currentBalance - finalTotal).toFixed(2);
         await box.update({ current_balance: newBalance }, { transaction: t });
       }
 
