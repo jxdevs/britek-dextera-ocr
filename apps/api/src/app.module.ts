@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExtractionModule } from './modules/extraction/extraction.module';
@@ -28,6 +29,7 @@ import { WorkersModule } from './modules/workers/workers.module';
     ApprovalsModule,
     WhatsappModule,
     ExtractionModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

@@ -5,6 +5,7 @@ import { AuthProvider } from './lib/auth';
 import AuditLogsPage from './pages/AuditLogsPage';
 import CajaDetailPage from './pages/CajaDetailPage';
 import CajasPage from './pages/CajasPage';
+import DashboardPage from './pages/DashboardPage';
 import FacturaDetailPage from './pages/FacturaDetailPage';
 import FacturasPendingPage from './pages/FacturasPendingPage';
 import LoginPage from './pages/LoginPage';
@@ -25,7 +26,15 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/facturas" replace />} />
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute roles={['admin', 'approver']}>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/workers"
               element={

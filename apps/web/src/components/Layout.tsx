@@ -1,9 +1,10 @@
-import { FileText, LogOut, MessageSquare, Receipt, ScanLine, ScrollText, Users, Wallet } from 'lucide-react';
+import { BarChart3, FileText, LogOut, MessageSquare, Receipt, ScanLine, ScrollText, Users, Wallet } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { cn } from '../lib/utils';
 
 const navItems = [
+  { to: '/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'approver'] as const },
   { to: '/facturas', label: 'Facturas', icon: Receipt, roles: ['admin', 'approver'] as const },
   { to: '/cajas', label: 'Cajas menores', icon: Wallet, roles: ['admin', 'approver'] as const },
   { to: '/workers', label: 'Usuarios', icon: Users, roles: ['admin'] as const },
