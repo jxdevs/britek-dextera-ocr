@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowDown,
@@ -10,6 +11,8 @@ import {
   DollarSign,
   Filter,
   Loader2,
+  Eye,
+  FileWarning,
   RefreshCw,
   Shield,
   TrendingUp,
@@ -23,6 +26,7 @@ import {
 } from 'recharts';
 import {
   dashboard,
+  invoices as invoicesApi,
   workers as workersApi,
   pettyCash,
   type DashboardKpis,
@@ -200,6 +204,7 @@ function CustomPieTooltip({ active, payload }: any) {
 // ── Main Component ──────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardKpis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -207,6 +212,8 @@ export default function DashboardPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [workersList, setWorkersList] = useState<Worker[]>([]);
   const [boxesList, setBoxesList] = useState<PettyCashBox[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [observedCount, setObservedCount] = useState(0);
 
   // Derive unique project names and cost centers from boxes
   const projectNames = useMemo(() => {
@@ -232,11 +239,20 @@ export default function DashboardPage() {
     }
   }, [filters]);
 
-  // Load workers and boxes for filter dropdowns
+  // Load workers, boxes, and invoice alert counts
   useEffect(() => {
     Promise.all([workersApi.list(), pettyCash.list()]).then(([w, b]) => {
       setWorkersList(w);
       setBoxesList(b);
+    }).catch(() => {});
+
+    // Fetch pending and observed invoice counts for alerts
+    Promise.all([
+      invoicesApi.list({ status: 'pending' }),
+      invoicesApi.list({ status: 'observed' }),
+    ]).then(([pending, observed]) => {
+      setPendingCount(pending.length);
+      setObservedCount(observed.length);
     }).catch(() => {});
   }, []);
 
@@ -354,6 +370,50 @@ export default function DashboardPage() {
             >
               Limpiar filtros
             </button>
+          )}
+        </div>
+      )}
+
+      {/* Alertas de facturas pendientes / observadas */}
+      {(pendingCount > 0 || observedCount > 0) && (
+        <div className="space-y-3 mb-6">
+          {pendingCount > 0 && (
+            <div
+              className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3.5 cursor-pointer hover:bg-amber-100 transition-colors"
+              onClick={() => navigate('/facturas')}
+            >
+              <div className="p-2 rounded-lg bg-amber-100 ring-1 ring-amber-300">
+                <Clock className="size-5 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-800">
+                  {pendingCount} factura{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''} de legalizar
+                </p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  Facturas enviadas por residentes esperando revisión y aprobación.
+                </p>
+              </div>
+              <Eye className="size-4 text-amber-500" />
+            </div>
+          )}
+          {observedCount > 0 && (
+            <div
+              className="flex items-center gap-3 rounded-xl border border-violet-300 bg-violet-50 px-5 py-3.5 cursor-pointer hover:bg-violet-100 transition-colors"
+              onClick={() => navigate('/facturas')}
+            >
+              <div className="p-2 rounded-lg bg-violet-100 ring-1 ring-violet-300">
+                <FileWarning className="size-5 text-violet-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-violet-800">
+                  {observedCount} factura{observedCount !== 1 ? 's' : ''} observada{observedCount !== 1 ? 's' : ''} requieren revisión
+                </p>
+                <p className="text-xs text-violet-600 mt-0.5">
+                  Facturas con alertas (sin NIT, baja confianza, alimentación o reporte tardío) que necesitan aprobación de un administrador.
+                </p>
+              </div>
+              <Eye className="size-4 text-violet-500" />
+            </div>
           )}
         </div>
       )}

@@ -170,8 +170,19 @@ export default function CajaDetailPage() {
             </button>
           </div>
         )}
-        {canEdit && box.status === 'closed' && (
+        {canEdit && (box.status === 'closed' || box.status === 'blocked') && (
           <div className="flex gap-2">
+            {box.status === 'blocked' && (
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={closing}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 hover:bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 disabled:opacity-50"
+              >
+                {closing ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
+                Cerrar caja
+              </button>
+            )}
             <button
               type="button"
               onClick={async () => {

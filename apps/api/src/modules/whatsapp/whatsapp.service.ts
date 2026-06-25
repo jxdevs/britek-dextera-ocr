@@ -333,7 +333,7 @@ export class WhatsappService {
 
   private async confirmInvoice(worker: Worker, invoiceId: string) {
     const invoice = await this.invoices.findByPk(invoiceId);
-    if (!invoice || invoice.status !== 'pending') {
+    if (!invoice || (invoice.status !== 'pending' && invoice.status !== 'observed')) {
       this.clearSession(worker.phone);
       await this.kapso.sendText(
         worker.phone,
@@ -550,10 +550,11 @@ export class WhatsappService {
 function formatCOP(amount: string | number): string {
   const n = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (!Number.isFinite(n)) return String(amount);
-  return n.toLocaleString('es-CO', { maximumFractionDigits: 0 });
+  return n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 function mimeFromContentType(mime: string): string {
+  if (mime.includes('pdf')) return 'pdf';
   if (mime.includes('png')) return 'png';
   if (mime.includes('webp')) return 'webp';
   return 'jpg';

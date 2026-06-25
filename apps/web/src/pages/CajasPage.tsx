@@ -1,5 +1,5 @@
-import { AlertTriangle, ChevronRight, Clock, Loader2, Plus, Users, User } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, Calendar, ChevronRight, Clock, Filter, Loader2, Plus, Users, User } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { pettyCash, type PettyCashBox } from '../lib/api';
@@ -10,6 +10,7 @@ export default function CajasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [workerFilter, setWorkerFilter] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -26,6 +27,25 @@ export default function CajasPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Extract unique workers from all boxes for the filter dropdown
+  const uniqueWorkers = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const box of items) {
+      for (const w of box.workers) {
+        if (!map.has(w.id)) map.set(w.id, w.name);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [items]);
+
+  // Filter boxes by selected worker
+  const filteredItems = useMemo(() => {
+    if (!workerFilter) return items;
+    return items.filter((box) => box.workers.some((w) => w.id === workerFilter));
+  }, [items, workerFilter]);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -46,6 +66,42 @@ export default function CajasPage() {
         </button>
       </div>
 
+      {/* Filter bar */}
+      {!loading && items.length > 0 && (
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <Filter className="size-4" />
+            <span className="font-medium">Filtrar por residente:</span>
+          </div>
+          <select
+            value={workerFilter}
+            onChange={(e) => setWorkerFilter(e.target.value)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 min-w-[200px]"
+          >
+            <option value="">Todos los residentes</option>
+            {uniqueWorkers.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+          {workerFilter && (
+            <button
+              type="button"
+              onClick={() => setWorkerFilter('')}
+              className="text-xs text-slate-500 hover:text-slate-700 underline"
+            >
+              Limpiar filtro
+            </button>
+          )}
+          {workerFilter && (
+            <span className="text-xs text-slate-500">
+              {filteredItems.length} de {items.length} caja(s)
+            </span>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-sm text-rose-800">
           {error}
@@ -60,9 +116,13 @@ export default function CajasPage() {
         <div className="bg-white border border-slate-200 rounded-lg py-12 text-center text-sm text-slate-500">
           No hay cajas abiertas todavía.
         </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-lg py-12 text-center text-sm text-slate-500">
+          No hay cajas para el residente seleccionado.
+        </div>
       ) : (
         <div className="grid gap-3">
-          {items.map((box) => (
+          {filteredItems.map((box) => (
             <BoxCard key={box.id} box={box} />
           ))}
         </div>
@@ -148,6 +208,11 @@ function BoxCard({ box }: { box: PettyCashBox }) {
             ) : (
               `${box.workers.length} residente(s)`
             )}
+            {' · '}
+            <span className="inline-flex items-center gap-0.5">
+              <Calendar className="size-3" />
+              {new Date(box.opened_at).toLocaleDateString('es-CO')}
+            </span>
           </p>
         </div>
         <div className="text-right">

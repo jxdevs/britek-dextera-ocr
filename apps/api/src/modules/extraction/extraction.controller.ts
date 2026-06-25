@@ -10,7 +10,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { GeminiService } from '../ai/gemini.service';
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 @Controller('extraction')
 export class ExtractionController {

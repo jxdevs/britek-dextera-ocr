@@ -25,16 +25,16 @@ export const invoiceResponseSchema = {
     subtotal: {
       type: Type.NUMBER,
       nullable: true,
-      description: 'Subtotal antes de impuestos, en la moneda detectada.',
+      description: 'Subtotal antes de impuestos. Valor numérico EXACTO. En Colombia el punto es separador de miles: "88.700" = 88700, NO 88.7.',
     },
     iva: {
       type: Type.NUMBER,
       nullable: true,
-      description: 'Valor del IVA o impuesto al valor agregado.',
+      description: 'Valor del IVA. Valor numérico EXACTO. "4.830" en factura colombiana = 4830, NO 4.83.',
     },
     total: {
       type: Type.NUMBER,
-      description: 'Total a pagar, impuestos incluidos.',
+      description: 'Total a pagar, impuestos incluidos. Valor EXACTO sin redondear. "93.530" = 93530.',
     },
     currency: {
       type: Type.STRING,
@@ -55,9 +55,9 @@ export const invoiceResponseSchema = {
         type: Type.OBJECT,
         properties: {
           description: { type: Type.STRING },
-          quantity: { type: Type.NUMBER, nullable: true },
-          unit_price: { type: Type.NUMBER, nullable: true },
-          total: { type: Type.NUMBER, nullable: true },
+          quantity: { type: Type.NUMBER, nullable: true, description: 'Cantidad exacta del item.' },
+          unit_price: { type: Type.NUMBER, nullable: true, description: 'Precio unitario EXACTO. "5.500" = 5500.' },
+          total: { type: Type.NUMBER, nullable: true, description: 'Total del item EXACTO. "5.500" = 5500, NO 5.5.' },
         },
         required: ['description'],
       },
@@ -82,10 +82,22 @@ Recibirás una imagen. Tu tarea:
 1. Determina si la imagen es una factura, recibo, ticket o documento de venta. Si NO lo es (selfie, captura aleatoria, foto borrosa sin texto, etc.), devuelve los campos disponibles con confidence_score < 0.3 y explica en "notes" por qué.
 2. Si SÍ es una factura, extrae los campos del schema. Reglas:
    - Fechas SIEMPRE en formato ISO YYYY-MM-DD.
-   - Números sin separadores de miles ni símbolo de moneda. Usa punto como separador decimal.
    - El NIT no debe contener puntos. Incluye el dígito de verificación con guion si aparece (ej: 900123456-7).
    - Si un campo no es legible o no aparece, déjalo en null en vez de inventar.
    - "items" puede ser una lista vacía si no se distinguen líneas.
+
+   ⚠️ REGLAS CRÍTICAS PARA VALORES NUMÉRICOS (subtotal, iva, total, items.unit_price, items.total):
+   - NUNCA redondees, trunces ni alteres los valores numéricos. Deben ser EXACTOS tal como aparecen en la factura.
+   - En Colombia, el PUNTO (.) es separador de MILES y la COMA (,) es separador DECIMAL.
+     Ejemplo: "5.500" en una factura colombiana significa CINCO MIL QUINIENTOS (5500), NO 5.5.
+     Ejemplo: "1.200,50" significa MIL DOSCIENTOS CON CINCUENTA CENTAVOS (1200.50).
+   - En tu respuesta JSON usa el formato numérico estándar: punto como decimal, sin separadores de miles.
+     Ejemplo: "88.700" en la factura → 88700 en el JSON. "4.830" → 4830. "93.530" → 93530.
+   - Si un precio dice "$5.500" extrae 5500, NO 5 ni 5.5.
+   - Si un total dice "$88.700" extrae 88700, NO 88.7 ni 89.
+   - Los valores de items (quantity, unit_price, total) también deben ser EXACTOS. Si un item dice "$5.500" el total es 5500.
+   - NUNCA quites ceros. NUNCA dividas entre 1000. NUNCA interpretes puntos colombianos como decimales.
+
 3. Clasifica el gasto en expense_category según el contenido:
    - "combustible" → gasolina, ACPM, gas vehicular.
    - "transporte" → taxis, plataformas de transporte, fletes.

@@ -28,6 +28,7 @@ interface KapsoV2Payload {
       timestamp?: string;
       text?: { body: string };
       image?: { id: string; mime_type?: string; sha256?: string; caption?: string };
+      document?: { id: string; mime_type?: string; sha256?: string; filename?: string; caption?: string };
       interactive?: {
         type: string;
         button_reply?: { id: string; title: string };
@@ -82,7 +83,12 @@ export class WhatsappController {
       }
 
       this.logger.log(`Mensaje: type=${msg.type}, from=${msg.from}, id=${msg.id}`);
-      this.logger.log(`Contenido: ${JSON.stringify(msg.text ?? msg.image ?? msg.interactive ?? '—')}`);
+      this.logger.log(`Contenido: ${JSON.stringify(msg.text ?? msg.image ?? msg.document ?? msg.interactive ?? '—')}`);
+
+      // Treat document messages (PDFs) as image for OCR processing
+      const effectiveType = (msg.type === 'document' && msg.document?.mime_type === 'application/pdf')
+        ? 'image'
+        : msg.type;
 
       // Map Kapso v2 → our internal format
       // For images: kapso.media_url = download URL, kapso.media_data = { url, filename, content_type, byte_size }
@@ -93,12 +99,12 @@ export class WhatsappController {
       const mapped = {
         message_id: msg.id,
         from: msg.from,
-        type: msg.type as 'text' | 'image' | 'interactive',
+        type: effectiveType as 'text' | 'image' | 'interactive',
         text: msg.text?.body,
         media_url: msg.kapso?.media_url ?? mediaData?.url ?? undefined,
         media_base64: undefined, // Kapso v2 doesn't send base64, only URLs
         media_mime_type:
-          mediaData?.content_type ?? msg.image?.mime_type ?? undefined,
+          mediaData?.content_type ?? msg.image?.mime_type ?? msg.document?.mime_type ?? undefined,
         interactive: msg.interactive
           ? {
               type: msg.interactive.type as 'button_reply' | 'list_reply',

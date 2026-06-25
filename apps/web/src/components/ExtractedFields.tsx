@@ -2,6 +2,20 @@ import { useEffect, useState } from 'react';
 import type { ExtractedInvoice, InvoiceItem } from '../lib/api';
 import { cn, formatMoney } from '../lib/utils';
 
+/** Format a number as Colombian integer (no decimals, dot as thousands separator) */
+function formatInt(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '';
+  return Math.round(value).toLocaleString('es-CO', { maximumFractionDigits: 0 });
+}
+
+/** Parse a formatted string (with dots as thousands) back to number */
+function parseFormattedInt(str: string): number | null {
+  const cleaned = str.replace(/\./g, '').replace(/,/g, '').trim();
+  if (cleaned === '') return null;
+  const n = parseInt(cleaned, 10);
+  return Number.isNaN(n) ? null : n;
+}
+
 interface Props {
   data: ExtractedInvoice;
 }
@@ -100,24 +114,33 @@ export function ExtractedFields({ data }: Props) {
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <Field
-            label="Subtotal"
-            value={form.subtotal}
-            onChange={(v) => update('subtotal', v === '' ? null : Number(v))}
-            type="number"
-          />
-          <Field
-            label="IVA"
-            value={form.iva}
-            onChange={(v) => update('iva', v === '' ? null : Number(v))}
-            type="number"
-          />
-          <Field
-            label="Total"
-            value={form.total}
-            onChange={(v) => update('total', Number(v))}
-            type="number"
-          />
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">Subtotal</span>
+            <input
+              type="text"
+              value={form.subtotal != null ? formatInt(form.subtotal) : ''}
+              onChange={(v) => update('subtotal', parseFormattedInt(v.target.value))}
+              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">IVA</span>
+            <input
+              type="text"
+              value={form.iva != null ? formatInt(form.iva) : ''}
+              onChange={(v) => update('iva', parseFormattedInt(v.target.value))}
+              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">Total</span>
+            <input
+              type="text"
+              value={formatInt(form.total)}
+              onChange={(v) => update('total', parseFormattedInt(v.target.value) ?? 0)}
+              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+            />
+          </label>
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
@@ -175,11 +198,11 @@ export function ExtractedFields({ data }: Props) {
                       </td>
                       <td className="px-2 py-1 text-right">
                         <input
-                          type="number"
-                          value={item.unit_price ?? ''}
+                          type="text"
+                          value={item.unit_price != null ? formatInt(item.unit_price) : '—'}
                           onChange={(e) =>
                             updateItem(idx, {
-                              unit_price: e.target.value === '' ? null : Number(e.target.value),
+                              unit_price: parseFormattedInt(e.target.value),
                             })
                           }
                           className="w-full bg-transparent text-right focus:outline-none"
@@ -187,11 +210,11 @@ export function ExtractedFields({ data }: Props) {
                       </td>
                       <td className="px-2 py-1 text-right">
                         <input
-                          type="number"
-                          value={item.total ?? ''}
+                          type="text"
+                          value={item.total != null ? formatInt(item.total) : '—'}
                           onChange={(e) =>
                             updateItem(idx, {
-                              total: e.target.value === '' ? null : Number(e.target.value),
+                              total: parseFormattedInt(e.target.value),
                             })
                           }
                           className="w-full bg-transparent text-right focus:outline-none"

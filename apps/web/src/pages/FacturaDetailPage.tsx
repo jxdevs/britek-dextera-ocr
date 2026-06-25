@@ -12,6 +12,19 @@ import {
 } from '../lib/api';
 import { cn, formatMoney } from '../lib/utils';
 
+/** Format a raw numeric string as Colombian integer (no decimals, dots for thousands) */
+function formatCOP(value: string): string {
+  if (!value) return '';
+  const n = Math.round(parseFloat(value));
+  if (Number.isNaN(n)) return value;
+  return n.toLocaleString('es-CO', { maximumFractionDigits: 0 });
+}
+
+/** Parse a formatted COP string (with dots) back to a raw numeric string */
+function parseCOP(formatted: string): string {
+  return formatted.replace(/\./g, '').replace(/,/g, '').trim();
+}
+
 const STATUS_LABEL: Record<InvoiceStatus, string> = {
   pending: 'Pendiente',
   observed: 'Observada',
@@ -217,9 +230,45 @@ export default function FacturaDetailPage() {
               <Field label="Fecha" type="date" value={form.invoice_date} onChange={(v) => update('invoice_date', v)} readOnly={readOnly} />
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Subtotal" type="number" value={form.subtotal} onChange={(v) => update('subtotal', v)} readOnly={readOnly} />
-              <Field label="IVA" type="number" value={form.iva} onChange={(v) => update('iva', v)} readOnly={readOnly} />
-              <Field label="Total" type="number" value={form.total} onChange={(v) => update('total', v)} readOnly={readOnly} />
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Subtotal</span>
+                <input
+                  type="text"
+                  value={formatCOP(form.subtotal)}
+                  readOnly={readOnly}
+                  onChange={(e) => update('subtotal', parseCOP(e.target.value))}
+                  className={cn(
+                    'mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900',
+                    readOnly && 'bg-slate-50 text-slate-700',
+                  )}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">IVA</span>
+                <input
+                  type="text"
+                  value={formatCOP(form.iva)}
+                  readOnly={readOnly}
+                  onChange={(e) => update('iva', parseCOP(e.target.value))}
+                  className={cn(
+                    'mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900',
+                    readOnly && 'bg-slate-50 text-slate-700',
+                  )}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-600">Total</span>
+                <input
+                  type="text"
+                  value={formatCOP(form.total)}
+                  readOnly={readOnly}
+                  onChange={(e) => update('total', parseCOP(e.target.value))}
+                  className={cn(
+                    'mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900',
+                    readOnly && 'bg-slate-50 text-slate-700',
+                  )}
+                />
+              </label>
             </div>
             <ItemsTable extractedData={invoice.extracted_data} />
 

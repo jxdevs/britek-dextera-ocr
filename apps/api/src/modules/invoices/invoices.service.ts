@@ -18,7 +18,7 @@ import { GeminiService } from '../ai/gemini.service';
 import { StorageService } from '../storage/storage.service';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 
-const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 /** Categorías que requieren aprobación especial (admin) */
 const RESTRICTED_CATEGORIES: ExpenseCategory[] = ['alimentacion'];
