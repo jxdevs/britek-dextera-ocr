@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'ocrdemo.token';
+const API_BASE_URL = "/cajamenor/api";
 
 export class ApiError extends Error {
   constructor(
@@ -26,7 +27,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
-  const res = await fetch(`/api${path}`, { ...init, headers });
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers
+  });
 
   if (res.status === 401) {
     setToken(null);
@@ -122,7 +126,9 @@ export async function fetchBlobWithAuth(path: string): Promise<Blob> {
   const token = getToken();
   const headers = new Headers();
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  const res = await fetch(`/api${path}`, { headers });
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers
+  });
   if (!res.ok) throw new ApiError(res.status, res.statusText);
   return res.blob();
 }
@@ -452,113 +458,5 @@ export const auditLogs = {
     if (filters.offset) qs.set('offset', String(filters.offset));
     const q = qs.toString();
     return request<AuditListResponse>(`/audit-logs${q ? `?${q}` : ''}`);
-  },
-};
-
-// ============ Dashboard KPIs ============
-
-export interface DashboardDeliveredVsLegalized {
-  total_delivered: number;
-  total_legalized: number;
-  legalized_pct: number;
-  by_project: Array<{ project_name: string; delivered: number; legalized: number; pct: number }>;
-  by_worker: Array<{ worker_id: string; worker_name: string; delivered: number; legalized: number; pct: number }>;
-}
-
-export interface DashboardSupportComposition {
-  total_invoices: number;
-  electronic_invoice: { count: number; pct: number; amount: number };
-  weak_support: { count: number; pct: number; amount: number };
-  no_support: { count: number; pct: number; amount: number };
-}
-
-export interface DashboardAmountAtRisk {
-  total: number;
-  by_reason: Array<{ reason: string; count: number; amount: number }>;
-}
-
-export interface DashboardAgingBuckets {
-  '0-7': { count: number; amount: number };
-  '8-15': { count: number; amount: number };
-  '16-30': { count: number; amount: number };
-  '30+': { count: number; amount: number };
-}
-
-export interface DashboardCapCompliance {
-  boxes_over_cap: number;
-  with_exception: number;
-  without_exception: number;
-}
-
-export interface DashboardExceptionDecisions {
-  total: number;
-  approved: number;
-  rejected: number;
-  by_approver: Array<{ approver_name: string; approved: number; rejected: number }>;
-}
-
-export interface DashboardAvailableBalance {
-  box_id: string;
-  box_code: string;
-  box_name: string;
-  project_name: string | null;
-  cost_center: string | null;
-  worker_name: string;
-  initial_amount: number;
-  current_balance: number;
-  consumed_pct: number;
-  cap: number;
-  threshold_alert: 'none' | 'yellow' | 'orange' | 'red';
-}
-
-export interface DashboardExpiringBox {
-  box_id: string;
-  box_code: string;
-  box_name: string;
-  project_name: string | null;
-  worker_name: string;
-  expires_at: string;
-  days_remaining: number;
-  pending_invoices: number;
-  urgency: 'critical' | 'high' | 'medium' | 'low';
-}
-
-export interface DashboardTimelyReporting {
-  total: number;
-  on_time: number;
-  late: number;
-  on_time_pct: number;
-}
-
-export interface DashboardKpis {
-  delivered_vs_legalized: DashboardDeliveredVsLegalized;
-  support_composition: DashboardSupportComposition;
-  amount_at_risk: DashboardAmountAtRisk;
-  aging_buckets: DashboardAgingBuckets;
-  cap_compliance: DashboardCapCompliance;
-  exception_decisions: DashboardExceptionDecisions;
-  available_balances: DashboardAvailableBalance[];
-  expiring_boxes: DashboardExpiringBox[];
-  timely_reporting: DashboardTimelyReporting;
-}
-
-export interface DashboardFilters {
-  project_name?: string;
-  cost_center?: string;
-  worker_id?: string;
-  from?: string;
-  to?: string;
-}
-
-export const dashboard = {
-  kpis: (filters: DashboardFilters = {}) => {
-    const qs = new URLSearchParams();
-    if (filters.project_name) qs.set('project_name', filters.project_name);
-    if (filters.cost_center) qs.set('cost_center', filters.cost_center);
-    if (filters.worker_id) qs.set('worker_id', filters.worker_id);
-    if (filters.from) qs.set('from', filters.from);
-    if (filters.to) qs.set('to', filters.to);
-    const q = qs.toString();
-    return request<DashboardKpis>(`/dashboard/kpis${q ? `?${q}` : ''}`);
   },
 };
