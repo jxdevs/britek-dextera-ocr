@@ -1,0 +1,98 @@
+# escape=`
+
+ARG NODE_VERSION=22.16.0
+ARG NGINX_VERSION=1.30.2
+
+# ═══════════════════════════════════════════════════════════════
+# Base Node.js para Windows Server 2019
+# ═══════════════════════════════════════════════════════════════
+FROM mcr.microsoft.com/windows/servercore:ltsc2019 AS node-base
+
+SHELL ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+
+ARG NODE_VERSION
+
+RUN $ErrorActionPreference='Stop'; `
+    $ProgressPreference='SilentlyContinue'; `
+    Invoke-WebRequest "https://nodejs.org/dist/v$env:NODE_VERSION/node-v$env:NODE_VERSION-win-x64.zip" -OutFile C:\node.zip; `
+    Expand-Archive C:\node.zip -DestinationPath C:\; `
+    Rename-Item "C:\node-v$env:NODE_VERSION-win-x64" C:\nodejs; `
+    Remove-Item C:\node.zip -Force
+
+ENV PATH="C:\nodejs;C:\Windows\system32;C:\Windows;C:\Windows\System32\WindowsPowerShell\v1.0"
+
+WORKDIR C:\app
+
+RUN node --version; npm --version
+
+
+# ═══════════════════════════════════════════════════════════════
+# Build API + WEB
+# ═══════════════════════════════════════════════════════════════
+FROM node-base AS builder
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+
+RUN npm ci
+
+COPY apps/api apps/api
+COPY apps/web apps/web
+
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+
+RUN npm run build -w api; npm exec --workspace=web -- vite build
+
+
+# ═══════════════════════════════════════════════════════════════
+# API NestJS
+# ═══════════════════════════════════════════════════════════════
+FROM node-base AS api
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+
+RUN npm ci --workspace=api --omit=dev; npm cache clean --force
+
+COPY --from=builder C:\app\apps\api\dist apps\api\dist
+
+RUN New-Item -ItemType Directory -Force C:\app\uploads; `
+    New-Item -ItemType Directory -Force C:\logs
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD powershell -NoProfile -Command "try { Invoke-WebRequest -Uri http://localhost:3000/auth/me -UseBasicParsing -TimeoutSec 5; exit 1 } catch { if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401) { exit 0 }; exit 1 }"
+
+CMD ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "node apps/api/dist/main.js 2>&1 | Tee-Object -FilePath C:\\logs\\api.log -Append"]
+
+
+# ═══════════════════════════════════════════════════════════════
+# Nginx Windows para frontend + reverse proxy
+# ═══════════════════════════════════════════════════════════════
+FROM mcr.microsoft.com/windows/servercore:ltsc2019 AS web
+
+SHELL ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+
+ARG NGINX_VERSION
+
+RUN $ErrorActionPreference='Stop'; `
+    $ProgressPreference='SilentlyContinue'; `
+    Invoke-WebRequest "https://nginx.org/download/nginx-$env:NGINX_VERSION.zip" -OutFile C:\nginx.zip; `
+    Expand-Archive C:\nginx.zip -DestinationPath C:\; `
+    Rename-Item "C:\nginx-$env:NGINX_VERSION" C:\nginx; `
+    Remove-Item C:\nginx.zip -Force; `
+    New-Item -ItemType Directory -Force C:\nginx\logs
+
+COPY --from=builder C:\app\apps\web\dist C:\nginx\html
+COPY nginx.windows.conf C:\nginx\conf\nginx.conf
+
+WORKDIR C:\nginx
+
+EXPOSE 80
+
+CMD ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "C:\\nginx\\nginx.exe -g 'daemon off;'"]

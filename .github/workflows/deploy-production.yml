@@ -1,0 +1,34 @@
+name: Deploy CajaMenor Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Rama o referencia a desplegar"
+        required: true
+        default: "main"
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - windows
+      - cajamenor
+      - production
+
+    environment:
+      name: production
+
+    steps:
+      - name: Mostrar información del despliegue
+        shell: powershell
+        run: |
+          Write-Host "Repositorio: $env:GITHUB_REPOSITORY"
+          Write-Host "Ejecutado por: $env:GITHUB_ACTOR"
+          Write-Host "Rama solicitada: ${{ github.event.inputs.branch }}"
+
+      - name: Ejecutar despliegue
+        shell: powershell
+        run: |
+          & "C:\britek-dextera-ocr-main\scripts\Deploy-CajaMenor.ps1" `
+            -Branch "${{ github.event.inputs.branch }}"
