@@ -406,6 +406,114 @@ export async function extractInvoice(file: File, model: string): Promise<Extract
   });
 }
 
+// ============ Dashboard ============
+
+export interface DashboardFilters {
+  project_name?: string;
+  cost_center?: string;
+  worker_id?: string;
+  from?: string;
+  to?: string;
+}
+
+export interface DeliveredVsLegalized {
+  total_delivered: number;
+  total_legalized: number;
+  legalized_pct: number;
+  by_project: Array<{ project_name: string; delivered: number; legalized: number; pct: number }>;
+  by_worker: Array<{ worker_id: string; worker_name: string; delivered: number; legalized: number; pct: number }>;
+}
+
+export interface SupportComposition {
+  total_invoices: number;
+  electronic_invoice: { count: number; pct: number; amount: number };
+  weak_support: { count: number; pct: number; amount: number };
+  no_support: { count: number; pct: number; amount: number };
+}
+
+export interface AmountAtRisk {
+  total: number;
+  by_reason: Array<{ reason: string; count: number; amount: number }>;
+}
+
+export interface AgingBuckets {
+  '0-7': { count: number; amount: number };
+  '8-15': { count: number; amount: number };
+  '16-30': { count: number; amount: number };
+  '30+': { count: number; amount: number };
+}
+
+export interface CapCompliance {
+  boxes_over_cap: number;
+  with_exception: number;
+  without_exception: number;
+}
+
+export interface ExceptionDecisions {
+  total: number;
+  approved: number;
+  rejected: number;
+  by_approver: Array<{ approver_name: string; approved: number; rejected: number }>;
+}
+
+export interface AvailableBalanceItem {
+  box_id: string;
+  box_code: string;
+  box_name: string;
+  project_name: string | null;
+  cost_center: string | null;
+  worker_name: string;
+  initial_amount: number;
+  current_balance: number;
+  consumed_pct: number;
+  cap: number;
+  threshold_alert: 'none' | 'yellow' | 'orange' | 'red';
+}
+
+export interface ExpiringBoxItem {
+  box_id: string;
+  box_code: string;
+  box_name: string;
+  project_name: string | null;
+  worker_name: string;
+  expires_at: string;
+  days_remaining: number;
+  pending_invoices: number;
+  urgency: 'critical' | 'high' | 'medium' | 'low';
+}
+
+export interface TimelyReporting {
+  total: number;
+  on_time: number;
+  late: number;
+  on_time_pct: number;
+}
+
+export interface DashboardKpis {
+  delivered_vs_legalized: DeliveredVsLegalized;
+  support_composition: SupportComposition;
+  amount_at_risk: AmountAtRisk;
+  aging_buckets: AgingBuckets;
+  cap_compliance: CapCompliance;
+  exception_decisions: ExceptionDecisions;
+  available_balances: AvailableBalanceItem[];
+  expiring_boxes: ExpiringBoxItem[];
+  timely_reporting: TimelyReporting;
+}
+
+export const dashboard = {
+  kpis: (filters: DashboardFilters = {}) => {
+    const qs = new URLSearchParams();
+    if (filters.project_name) qs.set('project_name', filters.project_name);
+    if (filters.cost_center) qs.set('cost_center', filters.cost_center);
+    if (filters.worker_id) qs.set('worker_id', filters.worker_id);
+    if (filters.from) qs.set('from', filters.from);
+    if (filters.to) qs.set('to', filters.to);
+    const q = qs.toString();
+    return request<DashboardKpis>(`/dashboard/kpis${q ? `?${q}` : ''}`);
+  },
+};
+
 // ============ Audit Logs ============
 
 export type AuditAction =
