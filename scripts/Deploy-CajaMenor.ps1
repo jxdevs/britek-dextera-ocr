@@ -65,7 +65,11 @@ docker-compose `
     -f $ComposeFile `
     ps | Tee-Object -FilePath $LogFile -Append
 
-Write-DeployLog "Validando frontend"
+Write-Host "Validando frontend"
+
+Write-Host "Esperando inicio del frontend..."
+Start-Sleep -Seconds 20
+
 $WebResponse = Invoke-WebRequest `
     -Uri "http://localhost:8080" `
     -UseBasicParsing `
