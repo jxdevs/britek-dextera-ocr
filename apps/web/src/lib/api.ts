@@ -325,6 +325,8 @@ export const invoices = {
     form.append('worker_id', worker_id);
     return request<Invoice>('/invoices', { method: 'POST', body: form });
   },
+  remove: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/invoices/${id}`, { method: 'DELETE' }),
 };
 
 // ============ Approvals ============

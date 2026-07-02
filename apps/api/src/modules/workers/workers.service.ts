@@ -1,11 +1,9 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import * as bcrypt from 'bcrypt';
 import { UniqueConstraintError } from 'sequelize';
 import { Worker } from '../../database/models';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
@@ -46,11 +44,6 @@ export class WorkersService {
 
   async create(dto: CreateWorkerDto, user: AuthUser) {
     const role = dto.role ?? 'worker';
-    if (role !== 'worker' && (!dto.email || !dto.password)) {
-      throw new BadRequestException(
-        'Admin y approver requieren email y password para iniciar sesión',
-      );
-    }
     try {
       const created = await this.workers.create({
         document_number: dto.document_number,
@@ -58,7 +51,7 @@ export class WorkersService {
         phone: dto.phone,
         email: dto.email ?? null,
         role,
-        password_hash: dto.password ? await bcrypt.hash(dto.password, 10) : null,
+        password_hash: null,
       });
 
       const result = await this.findOne(created.id);
@@ -91,9 +84,7 @@ export class WorkersService {
         phone: dto.phone ?? worker.phone,
         email: dto.email !== undefined ? dto.email : worker.email,
         role: dto.role ?? worker.role,
-        password_hash: dto.password
-          ? await bcrypt.hash(dto.password, 10)
-          : worker.password_hash,
+        password_hash: worker.password_hash,
       });
 
       const result = await this.findOne(id);

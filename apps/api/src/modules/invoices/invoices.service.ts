@@ -228,6 +228,41 @@ export class InvoicesService {
       mimeType: this.storage.mimeTypeFromPath(invoice.image_url),
     };
   }
+
+  async remove(id: string, user: { id: string; name: string; role: string }) {
+    const invoice = await this.invoices.findByPk(id, {
+      include: [{ model: Worker, attributes: ['id', 'name'] }],
+    });
+    if (!invoice) throw new NotFoundException('Factura no encontrada');
+
+    if (invoice.status !== 'rejected') {
+      throw new BadRequestException(
+        'Solo se pueden eliminar facturas rechazadas',
+      );
+    }
+
+    const beforeData = {
+      id: invoice.id,
+      vendor_name: invoice.vendor_name,
+      total: invoice.total,
+      status: invoice.status,
+      worker: invoice.worker?.name,
+    };
+
+    // Delete associated approvals first
+    await this.approvals.destroy({ where: { invoice_id: id } });
+
+    // Try to delete image from storage
+    try {
+      await this.storage.delete(invoice.image_url);
+    } catch (err) {
+      this.logger.warn(`Could not delete image for invoice ${id}`, err);
+    }
+
+    await invoice.destroy();
+
+    return { id, deleted: true };
+  }
 }
 
 function toStringOrNull(v: unknown): string | null {

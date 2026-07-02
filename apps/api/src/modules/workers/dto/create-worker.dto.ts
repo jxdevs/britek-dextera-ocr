@@ -29,10 +29,8 @@ export class CreateWorkerDto {
   @IsEmail()
   email?: string | null;
 
-  @IsOptional()
-  @IsString()
-  @MinLength(6)
-  password?: string;
+
+
 
   @IsOptional()
   @IsIn(['worker', 'approver', 'admin'])

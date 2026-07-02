@@ -1,9 +1,10 @@
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthImage } from '../components/AuthImage';
 import { InvoiceUploadModal } from '../components/InvoiceUploadModal';
 import { invoices as invoicesApi, type Invoice, type InvoiceStatus, type ExpenseCategory } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { cn, formatMoney } from '../lib/utils';
 
 const TABS: { value: InvoiceStatus; label: string }[] = [
@@ -40,11 +41,13 @@ const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
 
 export default function FacturasPendingPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [status, setStatus] = useState<InvoiceStatus>('pending');
   const [items, setItems] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,11 +122,39 @@ export default function FacturasPendingPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {items.map((inv) => (
-            <Link
-              key={inv.id}
-              to={`/facturas/${inv.id}`}
-              className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:shadow-sm hover:border-slate-300 transition-all flex flex-col"
-            >
+            <div key={inv.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:shadow-sm hover:border-slate-300 transition-all flex flex-col relative">
+              {status === 'rejected' && user?.role === 'admin' && (
+                <button
+                  type="button"
+                  disabled={deleting === inv.id}
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!confirm('¿Eliminar esta factura rechazada? Esta acción no se puede deshacer.')) return;
+                    setDeleting(inv.id);
+                    try {
+                      await invoicesApi.remove(inv.id);
+                      setItems((prev) => prev.filter((i) => i.id !== inv.id));
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : 'Error al eliminar');
+                    } finally {
+                      setDeleting(null);
+                    }
+                  }}
+                  className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-white/90 backdrop-blur-sm border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition-colors shadow-sm"
+                  title="Eliminar factura"
+                >
+                  {deleting === inv.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )}
+                </button>
+              )}
+              <Link
+                to={`/facturas/${inv.id}`}
+                className="flex flex-col flex-1">
+
               <AuthImage
                 path={`/invoices/${inv.id}/image`}
                 alt={inv.vendor_name ?? 'Factura'}
@@ -182,7 +213,8 @@ export default function FacturasPendingPage() {
                   </div>
                 </div>
               </div>
-            </Link>
+              </Link>
+            </div>
           ))}
         </div>
       )}
