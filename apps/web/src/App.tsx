@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { AuthProvider } from './lib/auth';
+import { AuthProvider, useAuth } from './lib/auth';
 import AuditLogsPage from './pages/AuditLogsPage';
 import CajaDetailPage from './pages/CajaDetailPage';
 import CajasPage from './pages/CajasPage';
@@ -9,9 +9,17 @@ import DashboardPage from './pages/DashboardPage';
 import FacturaDetailPage from './pages/FacturaDetailPage';
 import FacturasPendingPage from './pages/FacturasPendingPage';
 import LoginPage from './pages/LoginPage';
+import MiCajaDetailPage from './pages/MiCajaDetailPage';
+import MisCajasPage from './pages/MisCajasPage';
 import TestExtraction from './pages/TestExtraction';
 import WhatsappEventsPage from './pages/WhatsappEventsPage';
 import WorkersPage from './pages/WorkersPage';
+
+function IndexRedirect() {
+  const { user } = useAuth();
+  if (user?.role === 'worker') return <Navigate to="/mis-cajas" replace />;
+  return <Navigate to="/dashboard" replace />;
+}
 
 export default function App() {
   return (
@@ -26,7 +34,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route index element={<IndexRedirect />} />
             <Route
               path="/dashboard"
               element={
@@ -56,6 +64,22 @@ export default function App() {
               element={
                 <ProtectedRoute roles={['admin', 'approver']}>
                   <CajaDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/mis-cajas"
+              element={
+                <ProtectedRoute roles={['worker']}>
+                  <MisCajasPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/mis-cajas/:id"
+              element={
+                <ProtectedRoute roles={['worker']}>
+                  <MiCajaDetailPage />
                 </ProtectedRoute>
               }
             />

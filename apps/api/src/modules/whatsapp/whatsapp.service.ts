@@ -78,24 +78,24 @@ export class WhatsappService {
     }
 
     const worker = await this.workers.findOne({ where: { phone } });
+
+    // Número no registrado → ignorar completamente.
+    // No se guarda nada en BD, no se responde nada.
+    if (!worker) {
+      this.logger.log(`Número ${phone} no registrado — ignorando completamente`);
+      return { ok: true, unknown_worker: true };
+    }
+
     const event =
       existing ??
       (await this.events.create({
-        worker_id: worker?.id ?? null,
+        worker_id: worker.id,
         kapso_message_id: payload.message_id,
         raw_payload: payload as unknown as Record<string, unknown>,
         processed: false,
       }));
 
     try {
-      if (!worker) {
-        await this.kapso.sendText(
-          phone,
-          'No estás registrado en Britek. Contacta al administrador.',
-        );
-        await event.update({ processed: true });
-        return { ok: true, unknown_worker: true };
-      }
 
       if (payload.type === 'interactive') {
         await this.handleButtonReply(worker, payload);

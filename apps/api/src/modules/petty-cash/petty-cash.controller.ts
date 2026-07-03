@@ -26,6 +26,30 @@ import { PettyCashService } from './petty-cash.service';
 export class PettyCashController {
   constructor(private readonly service: PettyCashService) {}
 
+  @Get('mine')
+  @Roles('worker')
+  listMine(@CurrentUser() user: AuthUser) {
+    return this.service.listByWorker(user.id);
+  }
+
+  @Get('mine/:id')
+  @Roles('worker')
+  findOneMine(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.findOneByWorker(id, user.id);
+  }
+
+  @Get('mine/:id/movements')
+  @Roles('worker')
+  movementsMine(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.movementsByWorker(id, user.id);
+  }
+
   @Get()
   @Roles('admin', 'approver')
   list() {

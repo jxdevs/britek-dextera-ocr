@@ -79,6 +79,84 @@ export class PettyCashService {
     return box;
   }
 
+  // ════════════════════════════════════════════════════════════════════
+  // CONSULTA PARA WORKERS (solo lectura)
+  // ════════════════════════════════════════════════════════════════════
+
+  async listByWorker(workerId: string) {
+    await this.blockExpiredBoxes();
+
+    return this.boxes.findAll({
+      include: [
+        {
+          model: Worker,
+          attributes: ['id', 'name', 'document_number', 'phone'],
+          through: { attributes: ['is_primary'] },
+        },
+      ],
+      where: {
+        id: {
+          [Op.in]: Sequelize.literal(
+            `(SELECT box_id FROM box_assignments WHERE worker_id = '${workerId}')`,
+          ),
+        },
+      },
+      order: [
+        ['status', 'ASC'],
+        ['opened_at', 'DESC'],
+      ],
+    });
+  }
+
+  async findOneByWorker(boxId: string, workerId: string) {
+    await this.blockExpiredBoxById(boxId);
+
+    const box = await this.boxes.findByPk(boxId, {
+      include: [
+        {
+          model: Worker,
+          attributes: ['id', 'name', 'document_number', 'phone'],
+          through: { attributes: ['is_primary'] },
+        },
+      ],
+    });
+    if (!box) throw new NotFoundException('Caja no encontrada');
+
+    const isAssigned = (box as any).workers?.some(
+      (w: Worker) => w.id === workerId,
+    );
+    if (!isAssigned) {
+      throw new ForbiddenException('No tienes acceso a esta caja');
+    }
+
+    return box;
+  }
+
+  async movementsByWorker(boxId: string, workerId: string) {
+    // Validate worker is assigned to this box
+    await this.findOneByWorker(boxId, workerId);
+
+    return this.invoices.findAll({
+      where: { box_id: boxId },
+      attributes: [
+        'id', 'vendor_name', 'vendor_nit', 'invoice_number', 'invoice_date',
+        'total', 'status', 'submitted_at', 'expense_category',
+        'requires_special_approval', 'reported_late',
+      ],
+      include: [
+        {
+          model: Approval,
+          required: false,
+          attributes: ['id', 'action', 'comments', 'created_at'],
+          include: [
+            { model: Worker, as: 'approver', attributes: ['id', 'name'] },
+          ],
+        },
+      ],
+      order: [['submitted_at', 'DESC']],
+    });
+  }
+
   async create(dto: CreateBoxDto, user: AuthUser) {
     this.validateTypeVsWorkers(dto.type, dto.worker_ids);
     if (dto.primary_worker_id && !dto.worker_ids.includes(dto.primary_worker_id)) {

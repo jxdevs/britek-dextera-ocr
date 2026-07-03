@@ -123,18 +123,6 @@ export class AuthService {
       );
     }
 
-    if (worker.role === 'worker') {
-      this.audit.log({
-        user: { id: worker.id, name: worker.name, role: worker.role },
-        action: 'login_failed',
-        entity: 'session',
-        entityLabel: email,
-        after: { email, reason: 'Residente intenta login por dashboard' },
-        ip,
-      });
-      throw new UnauthorizedException('Los residentes se autentican por WhatsApp');
-    }
-
     const token = await this.jwt.signAsync({
       sub: worker.id,
       email: worker.email,

@@ -242,6 +242,10 @@ export const pettyCash = {
     request<{ id: string; deleted: boolean }>(`/petty-cash/${id}`, {
       method: 'DELETE',
     }),
+  // Worker read-only endpoints
+  listMine: () => request<PettyCashBox[]>('/petty-cash/mine'),
+  getMine: (id: string) => request<PettyCashBox>(`/petty-cash/mine/${id}`),
+  movementsMine: (id: string) => request<Movement[]>(`/petty-cash/mine/${id}/movements`),
 };
 
 // ============ Invoices ============

@@ -7,6 +7,7 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['admin', 'approver'] as const },
   { to: '/facturas', label: 'Facturas', icon: Receipt, roles: ['admin', 'approver'] as const },
   { to: '/cajas', label: 'Cajas menores', icon: Wallet, roles: ['admin', 'approver'] as const },
+  { to: '/mis-cajas', label: 'Mis cajas', icon: Wallet, roles: ['worker'] as const },
   { to: '/workers', label: 'Usuarios', icon: Users, roles: ['admin'] as const },
   { to: '/audit', label: 'Auditoría', icon: ScrollText, roles: ['admin'] as const },
   // { to: '/whatsapp', label: 'WhatsApp · debug', icon: MessageSquare, roles: ['admin'] as const },
