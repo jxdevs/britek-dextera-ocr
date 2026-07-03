@@ -24,10 +24,11 @@ export default () => ({
     },
   },
   kapso: {
-    webhookSecret: process.env.KAPSO_WEBHOOK_SECRET ?? '',
-    apiKey: process.env.KAPSO_API_KEY ?? '',
-    apiUrl: process.env.KAPSO_API_URL ?? 'https://api.kapso.ai/v1',
-    phoneNumberId: process.env.KAPSO_PHONE_NUMBER_ID ?? '',
+    // Credenciales hardcodeadas — cambiar aquí y hacer deploy.
+    webhookSecret: 'cfcf919c82b840fd0435de4604605f4cb7c173c2ca991f07c4cfc5afe89a4327',
+    apiKey: '03c620f2ba12c421dbe61f5f10d4922c8772980c1b3fcc1ab2af1a5afdebe186',
+    apiUrl: 'https://api.kapso.ai/v1',
+    phoneNumberId: '1106594329211348',
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
