@@ -1,4 +1,4 @@
-import { Upload } from 'lucide-react';
+import { FileText, Upload } from 'lucide-react';
 import { useCallback, useState, type DragEvent } from 'react';
 import { cn } from '../lib/utils';
 
@@ -7,6 +7,8 @@ interface Props {
   previewUrl: string | null;
   onFile: (file: File) => void;
 }
+
+const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp,application/pdf';
 
 export function ImagePreview({ file, previewUrl, onFile }: Props) {
   const [isDragging, setIsDragging] = useState(false);
@@ -20,6 +22,8 @@ export function ImagePreview({ file, previewUrl, onFile }: Props) {
     },
     [onFile],
   );
+
+  const isPdf = file?.type === 'application/pdf';
 
   if (file && previewUrl) {
     return (
@@ -35,7 +39,7 @@ export function ImagePreview({ file, previewUrl, onFile }: Props) {
             Cambiar
             <input
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept={ACCEPTED_TYPES}
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -44,13 +48,28 @@ export function ImagePreview({ file, previewUrl, onFile }: Props) {
             />
           </label>
         </div>
-        <div className="bg-slate-100 p-4 flex items-center justify-center min-h-[400px]">
-          <img
-            src={previewUrl}
-            alt="Factura"
-            className="max-w-full max-h-[600px] object-contain rounded shadow-sm"
-          />
-        </div>
+        {isPdf ? (
+          <div className="bg-slate-50 flex flex-col items-center justify-center min-h-[400px] gap-3">
+            <FileText className="size-12 text-rose-500" />
+            <p className="text-sm font-medium text-slate-700">{file.name}</p>
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 underline"
+            >
+              Abrir PDF en nueva pestaña
+            </a>
+          </div>
+        ) : (
+          <div className="bg-slate-100 p-4 flex items-center justify-center min-h-[400px]">
+            <img
+              src={previewUrl}
+              alt="Factura"
+              className="max-w-full max-h-[600px] object-contain rounded shadow-sm"
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -72,7 +91,7 @@ export function ImagePreview({ file, previewUrl, onFile }: Props) {
     >
       <input
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept={ACCEPTED_TYPES}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -81,7 +100,7 @@ export function ImagePreview({ file, previewUrl, onFile }: Props) {
       />
       <Upload className="mx-auto size-10 text-slate-400 mb-3" strokeWidth={1.5} />
       <p className="text-sm font-medium text-slate-900">Arrastra una factura o haz clic para seleccionar</p>
-      <p className="text-xs text-slate-500 mt-1">JPG, PNG o WEBP · hasta 10 MB</p>
+      <p className="text-xs text-slate-500 mt-1">JPG, PNG, WEBP o PDF · hasta 10 MB</p>
     </label>
   );
 }

@@ -133,6 +133,20 @@ export async function fetchBlobWithAuth(path: string): Promise<Blob> {
   return res.blob();
 }
 
+/** Like fetchBlobWithAuth but also returns the content type */
+export async function fetchBlobWithType(path: string): Promise<{ blob: Blob; contentType: string }> {
+  const token = getToken();
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers
+  });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  const blob = await res.blob();
+  const contentType = res.headers.get('Content-Type') ?? blob.type ?? 'application/octet-stream';
+  return { blob, contentType };
+}
+
 // ============ Petty cash ============
 
 export type BoxType = 'individual' | 'shared';

@@ -1,7 +1,7 @@
 import { ArrowLeft, Check, Loader2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AuthImage } from '../components/AuthImage';
+import { AuthFilePreview } from '../components/AuthFilePreview';
 import {
   ApiError,
   approvals as approvalsApi,
@@ -208,10 +208,9 @@ export default function FacturaDetailPage() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-          <AuthImage
+          <AuthFilePreview
             path={`/invoices/${invoice.id}/image`}
             alt={invoice.vendor_name ?? 'Factura'}
-            className="w-full h-auto max-h-[85vh] object-contain bg-slate-100"
           />
         </div>
 

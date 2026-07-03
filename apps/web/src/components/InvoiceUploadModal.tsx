@@ -118,7 +118,7 @@ export function InvoiceUploadModal({ onClose, onCreated }: Props) {
             >
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -129,7 +129,7 @@ export function InvoiceUploadModal({ onClose, onCreated }: Props) {
               <p className="text-sm font-medium text-slate-900">
                 Arrastra una factura o haz clic
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">JPG, PNG o WEBP · hasta 10 MB</p>
+              <p className="text-xs text-slate-500 mt-0.5">JPG, PNG, WEBP o PDF · hasta 10 MB</p>
             </label>
           )}
 
