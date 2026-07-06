@@ -9,6 +9,7 @@ import {
   type PettyCashBox,
   type Worker,
 } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { cn } from '../lib/utils';
 
 interface Props {
@@ -21,6 +22,9 @@ interface Props {
 }
 
 export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubmit }: Props) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const [allWorkers, setAllWorkers] = useState<Worker[]>([]);
   const [loadingWorkers, setLoadingWorkers] = useState(true);
 
@@ -34,6 +38,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
   const [primary, setPrimary] = useState<string | undefined>(initial?.primary_worker_id);
   const [projectName, setProjectName] = useState(initial?.project_name ?? '');
   const [costCenter, setCostCenter] = useState(initial?.cost_center ?? '');
+  const [exceptionJustification, setExceptionJustification] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +46,8 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
 
   const MAX_AMOUNT = 1_000_000;
   const amountExceedsLimit = parseFloat(amount || '0') > MAX_AMOUNT;
+  // Los admins pueden superar el tope si proporcionan una justificación
+  const amountBlocked = amountExceedsLimit && (!isAdmin || exceptionJustification.trim().length < 10);
 
   useEffect(() => {
     const loadData = async () => {
@@ -50,7 +57,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
           mode === 'create' ? pettyCash.list() : Promise.resolve([] as PettyCashBox[]),
         ]);
         setAllWorkers(w);
-        // Build a map of worker_id → box code for workers that already have an open box
+        // Construir mapa de worker_id → código de caja para residentes que ya tienen una caja abierta
         const busy = new Map<string, string>();
         for (const box of boxes) {
           if (box.status === 'open') {
@@ -95,7 +102,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({
+      const input: CreateBoxInput = {
         code: code.trim(),
         name: name.trim(),
         type,
@@ -104,7 +111,12 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
         cost_center: costCenter.trim(),
         worker_ids: selected,
         primary_worker_id: type === 'shared' ? primary : selected[0],
-      });
+      };
+      // Incluir justificación de excepción cuando el admin supera el tope
+      if (amountExceedsLimit && isAdmin) {
+        input.exception_justification = exceptionJustification.trim();
+      }
+      await onSubmit(input);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Error');
     } finally {
@@ -141,22 +153,42 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                     type="number"
                     step="0.01"
                     min="0"
-                    max={MAX_AMOUNT}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     required
                     placeholder="1000000"
                     className={cn(
                       'mt-1 w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2',
-                      amountExceedsLimit
+                      amountExceedsLimit && !isAdmin
                         ? 'border-rose-400 focus:ring-rose-500 text-rose-700'
-                        : 'border-slate-300 focus:ring-slate-900',
+                        : amountExceedsLimit && isAdmin
+                          ? 'border-amber-400 focus:ring-amber-500 text-amber-700'
+                          : 'border-slate-300 focus:ring-slate-900',
                     )}
                   />
-                  {amountExceedsLimit && (
+                  {amountExceedsLimit && !isAdmin && (
                     <p className="mt-1 text-xs text-rose-600 font-medium">
                       El monto no puede superar $1.000.000
                     </p>
+                  )}
+                  {amountExceedsLimit && isAdmin && (
+                    <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-md">
+                      <p className="text-xs text-amber-800 font-medium mb-1.5">
+                        ⚠️ El monto supera $1.000.000 — Se requiere justificación de excepción
+                      </p>
+                      <textarea
+                        value={exceptionJustification}
+                        onChange={(e) => setExceptionJustification(e.target.value)}
+                        placeholder="Explique por qué se requiere un monto superior al tope (mín. 10 caracteres)"
+                        rows={2}
+                        className="w-full rounded-md border border-amber-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                      />
+                      {exceptionJustification.trim().length > 0 && exceptionJustification.trim().length < 10 && (
+                        <p className="mt-1 text-xs text-amber-600">
+                          La justificación debe tener al menos 10 caracteres ({exceptionJustification.trim().length}/10)
+                        </p>
+                      )}
+                    </div>
                   )}
                 </label>
               </div>
@@ -336,7 +368,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
             </button>
             <button
               type="submit"
-              disabled={!valid || saving || amountExceedsLimit}
+              disabled={!valid || saving || amountBlocked}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-md"
             >
               {saving && <Loader2 className="size-3.5 animate-spin" />}
