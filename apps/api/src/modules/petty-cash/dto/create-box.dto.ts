@@ -24,8 +24,8 @@ export class CreateBoxDto {
   @IsIn(['individual', 'shared'])
   type!: BoxType;
 
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
   // Nota: el tope de $1.000.000 se valida en el service con lógica de excepciones
   initial_amount!: number;
 

@@ -537,7 +537,7 @@ function EditBoxModal({
       if (projectName !== (box.project_name ?? '')) input.project_name = projectName;
       if (costCenter !== (box.cost_center ?? '')) input.cost_center = costCenter;
       if (initialAmount !== box.initial_amount)
-        input.initial_amount = parseFloat(initialAmount);
+        input.initial_amount = parseInt(initialAmount, 10);
 
       await pettyCash.update(box.id, input);
       onSaved();
@@ -618,7 +618,7 @@ function EditBoxModal({
             value={initialAmount}
             onChange={(e) => setInitialAmount(e.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-            step="0.01"
+            step="1"
             min="0"
             required
           />

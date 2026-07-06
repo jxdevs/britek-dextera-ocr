@@ -2,7 +2,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  Max,
   Min,
   MinLength,
 } from 'class-validator';
@@ -19,9 +18,8 @@ export class UpdateBoxDto {
   name?: string;
 
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(1_000_000, { message: 'El monto inicial no puede superar $1.000.000' })
+  @IsNumber({ maxDecimalPlaces: 0 })
+  @Min(1)
   initial_amount?: number;
 
   @IsOptional()

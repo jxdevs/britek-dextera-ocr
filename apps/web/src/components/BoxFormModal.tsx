@@ -45,7 +45,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
   const [busyWorkers, setBusyWorkers] = useState<Map<string, string>>(new Map());
 
   const MAX_AMOUNT = 1_000_000;
-  const amountExceedsLimit = parseFloat(amount || '0') > MAX_AMOUNT;
+  const amountExceedsLimit = parseInt(amount || '0', 10) > MAX_AMOUNT;
   // Los admins pueden superar el tope si proporcionan una justificación
   const amountBlocked = amountExceedsLimit && (!isAdmin || exceptionJustification.trim().length < 10);
 
@@ -106,7 +106,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
         code: code.trim(),
         name: name.trim(),
         type,
-        initial_amount: parseFloat(amount || '0'),
+        initial_amount: parseInt(amount || '0', 10),
         project_name: projectName.trim(),
         cost_center: costCenter.trim(),
         worker_ids: selected,
@@ -151,7 +151,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                   <span className="text-xs font-medium text-slate-600">Monto inicial</span>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     min="0"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
