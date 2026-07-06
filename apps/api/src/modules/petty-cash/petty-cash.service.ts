@@ -279,6 +279,20 @@ export class PettyCashService {
     if (dto.cost_center !== undefined) updates.cost_center = dto.cost_center;
 
     if (dto.initial_amount !== undefined) {
+      // ── Regla 2b: Tope de $1.000.000 con excepciones ──
+      if (dto.initial_amount > MAX_BOX_AMOUNT) {
+        if (user.role !== 'admin') {
+          throw new ForbiddenException(
+            `El monto supera $${MAX_BOX_AMOUNT.toLocaleString('es-CO')}. Solo un admin puede asignar montos con excepción al tope.`,
+          );
+        }
+        if (!dto.exception_justification) {
+          throw new BadRequestException(
+            `El monto supera $${MAX_BOX_AMOUNT.toLocaleString('es-CO')}. Debe incluir una justificación (exception_justification).`,
+          );
+        }
+      }
+
       updates.initial_amount = dto.initial_amount.toFixed(2);
 
       // Auto-recalcular current_balance para preservar el monto consumido
@@ -309,6 +323,12 @@ export class PettyCashService {
       throw this.mapError(err);
     }
 
+    const auditAfter: Record<string, unknown> = { ...updates };
+    if (dto.initial_amount !== undefined && dto.initial_amount > MAX_BOX_AMOUNT) {
+      auditAfter.exception_justification = dto.exception_justification;
+      auditAfter.exception_approved_by = user.name;
+    }
+
     this.audit.log({
       user,
       action: 'update',
@@ -316,7 +336,7 @@ export class PettyCashService {
       entityId: id,
       entityLabel: `${box.name} - ${box.code}`,
       before: beforeData,
-      after: updates,
+      after: auditAfter,
     });
 
     return this.findOne(id);

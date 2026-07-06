@@ -222,6 +222,7 @@ export interface UpdateBoxInput {
   current_balance?: number;
   project_name?: string;
   cost_center?: string;
+  exception_justification?: string;
 }
 
 export const pettyCash = {

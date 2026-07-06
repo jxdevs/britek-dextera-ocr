@@ -36,4 +36,10 @@ export class UpdateBoxDto {
   @IsString()
   @MinLength(1)
   cost_center?: string;
+
+  /** Requerido cuando initial_amount > $1.000.000 */
+  @IsOptional()
+  @IsString()
+  @MinLength(10, { message: 'La justificación de excepción debe tener al menos 10 caracteres' })
+  exception_justification?: string;
 }
