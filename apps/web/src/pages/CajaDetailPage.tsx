@@ -523,8 +523,14 @@ function EditBoxModal({
   const [projectName, setProjectName] = useState(box.project_name ?? '');
   const [costCenter, setCostCenter] = useState(box.cost_center ?? '');
   const [initialAmount, setInitialAmount] = useState(box.initial_amount);
+  const [exceptionJustification, setExceptionJustification] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const MAX_AMOUNT = 1_000_000;
+  const amountExceedsLimit = parseInt(initialAmount || '0', 10) > MAX_AMOUNT;
+  // El admin puede superar el tope si proporciona una justificación
+  const amountBlocked = amountExceedsLimit && exceptionJustification.trim().length < 10;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -538,6 +544,11 @@ function EditBoxModal({
       if (costCenter !== (box.cost_center ?? '')) input.cost_center = costCenter;
       if (initialAmount !== box.initial_amount)
         input.initial_amount = parseInt(initialAmount, 10);
+
+      // Incluir justificación de excepción cuando el monto supera el tope
+      if (amountExceedsLimit) {
+        input.exception_justification = exceptionJustification.trim();
+      }
 
       await pettyCash.update(box.id, input);
       onSaved();
@@ -617,11 +628,35 @@ function EditBoxModal({
             type="number"
             value={initialAmount}
             onChange={(e) => setInitialAmount(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className={cn(
+              'w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2',
+              amountExceedsLimit
+                ? 'border-amber-400 focus:ring-amber-500 text-amber-700'
+                : 'border-slate-300 focus:ring-slate-400',
+            )}
             step="1"
             min="0"
             required
           />
+          {amountExceedsLimit && (
+            <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-md">
+              <p className="text-xs text-amber-800 font-medium mb-1.5">
+                ⚠️ El monto supera $1.000.000 — Se requiere justificación de excepción
+              </p>
+              <textarea
+                value={exceptionJustification}
+                onChange={(e) => setExceptionJustification(e.target.value)}
+                placeholder="Explique por qué se requiere un monto superior al tope (mín. 10 caracteres)"
+                rows={2}
+                className="w-full rounded-md border border-amber-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+              />
+              {exceptionJustification.trim().length > 0 && exceptionJustification.trim().length < 10 && (
+                <p className="mt-1 text-xs text-amber-600">
+                  La justificación debe tener al menos 10 caracteres ({exceptionJustification.trim().length}/10)
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -634,7 +669,7 @@ function EditBoxModal({
           </button>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || amountBlocked}
             className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {saving ? 'Guardando…' : 'Guardar cambios'}
