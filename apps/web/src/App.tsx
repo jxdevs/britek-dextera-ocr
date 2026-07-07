@@ -24,7 +24,7 @@ function IndexRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename='/cajamenor'>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
