@@ -18,6 +18,41 @@ export function formatNumber(value: number | null | undefined, digits = 0) {
   return new Intl.NumberFormat('es-CO', { maximumFractionDigits: digits }).format(value);
 }
 
+// ============ Saldo de caja (puede ser negativo) ============
+
+export interface BalanceDisplay {
+  /** Monto en positivo, ya formateado. */
+  amount: string;
+  /** Qué significa ese monto: 'disponible' o 'a favor del residente'. */
+  caption: string;
+  /** El saldo está en negativo: la empresa le debe al residente. */
+  isOverdrawn: boolean;
+  /** Clase de color para el monto. */
+  textClass: string;
+}
+
+/**
+ * Un saldo negativo no se muestra como "-$30.000" sino como "$30.000 a favor del
+ * residente": gastó por encima del monto asignado y la empresa le queda debiendo.
+ */
+export function getBalanceDisplay(currentBalance: string | number): BalanceDisplay {
+  const value = typeof currentBalance === 'string' ? parseFloat(currentBalance) : currentBalance;
+  if (!Number.isFinite(value) || value >= 0) {
+    return {
+      amount: formatMoney(Number.isFinite(value) ? value : 0),
+      caption: 'disponible',
+      isOverdrawn: false,
+      textClass: 'text-slate-900',
+    };
+  }
+  return {
+    amount: formatMoney(Math.abs(value)),
+    caption: 'a favor del residente',
+    isOverdrawn: true,
+    textClass: 'text-rose-700',
+  };
+}
+
 // ============ Box deadline (semáforo) ============
 
 export const BOX_DEADLINE_DAYS = 7;
@@ -92,13 +127,15 @@ export function getBoxDeadlineInfo(openedAt: string): BoxDeadlineInfo {
 
 // ============ Box consumption alerts ============
 
-export type ConsumptionSeverity = 'warning' | 'critical' | 'depleted';
+export type ConsumptionSeverity = 'warning' | 'critical' | 'depleted' | 'overdrawn';
 
 export interface BoxConsumptionAlert {
-  /** Percentage consumed (0-100) */
+  /** Percentage consumed (0-100, tope 100 aunque haya sobregiro) */
   consumedPct: number;
-  /** Percentage remaining (0-100) */
+  /** Percentage remaining (0-100, nunca negativo) */
   remainingPct: number;
+  /** Monto en positivo que la caja debe de más. Solo en severity 'overdrawn'. */
+  overdraftAmount: number;
   severity: ConsumptionSeverity;
   /** Short label for badges */
   badgeLabel: string;
@@ -109,7 +146,8 @@ export interface BoxConsumptionAlert {
 }
 
 /**
- * Returns an alert if the box consumption is >= 75% of the initial amount.
+ * Returns an alert if the box consumption is >= 75% of the initial amount,
+ * or if the balance went negative (saldo a favor del residente).
  * Returns null if consumption is below the threshold.
  */
 export function getBoxConsumptionAlert(
@@ -118,6 +156,23 @@ export function getBoxConsumptionAlert(
 ): BoxConsumptionAlert | null {
   const initial = parseFloat(initialAmount);
   const current = parseFloat(currentBalance);
+
+  // El sobregiro se evalúa antes que los porcentajes: sin este corte, consumedPct
+  // pasa de 100 y remainingPct queda negativo ("-15% restante").
+  if (Number.isFinite(current) && current < 0) {
+    const overdraftAmount = Math.abs(current);
+    return {
+      consumedPct: 100,
+      remainingPct: 0,
+      overdraftAmount,
+      severity: 'overdrawn',
+      badgeLabel: `${formatMoney(overdraftAmount)} a favor`,
+      bannerLabel: `Caja sobregirada — quedan ${formatMoney(overdraftAmount)} a favor del residente.`,
+      dotColor: 'bg-rose-600',
+      bannerClasses: 'bg-rose-50 border-rose-300 text-rose-900',
+    };
+  }
+
   if (!Number.isFinite(initial) || initial <= 0) return null;
 
   const consumed = initial - current;
@@ -128,6 +183,7 @@ export function getBoxConsumptionAlert(
     return {
       consumedPct,
       remainingPct,
+      overdraftAmount: 0,
       severity: 'depleted',
       badgeLabel: `${remainingPct.toFixed(0)}% restante`,
       bannerLabel: `⚠️ Fondos casi agotados — solo queda el ${remainingPct.toFixed(1)}% del monto. Prepare la legalización.`,
@@ -139,6 +195,7 @@ export function getBoxConsumptionAlert(
     return {
       consumedPct,
       remainingPct,
+      overdraftAmount: 0,
       severity: 'critical',
       badgeLabel: `${remainingPct.toFixed(0)}% restante`,
       bannerLabel: `Se ha consumido el ${consumedPct.toFixed(0)}% del monto. Inicie la preparación de legalización.`,
@@ -150,6 +207,7 @@ export function getBoxConsumptionAlert(
     return {
       consumedPct,
       remainingPct,
+      overdraftAmount: 0,
       severity: 'warning',
       badgeLabel: `${remainingPct.toFixed(0)}% restante`,
       bannerLabel: `Alerta: se ha consumido el ${consumedPct.toFixed(0)}% del monto. Revise la caja y prepare la legalización.`,

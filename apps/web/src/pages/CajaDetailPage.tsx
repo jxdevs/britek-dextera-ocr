@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { approvals as approvalsApi, pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { cn, formatMoney, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
+import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
 export default function CajaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -78,12 +78,15 @@ export default function CajaDetailPage() {
   }
 
   const initial = parseFloat(box.initial_amount);
+  const available = parseFloat(box.current_balance);
+  const balance = getBalanceDisplay(available);
   const activeMovements = movements.filter((m) => m.status !== 'rejected');
   const consumed = activeMovements.reduce((sum, m) => sum + parseFloat(m.total), 0);
   const legalized = movements.filter((m) => m.status === 'approved').reduce((sum, m) => sum + parseFloat(m.total), 0);
   const pendingCount = movements.filter((m) => m.status === 'pending').length;
   const consumedPct = initial > 0 ? (consumed / initial) * 100 : 0;
   const legalizedPct = initial > 0 ? (legalized / initial) * 100 : 0;
+  const availablePct = initial > 0 ? (available / initial) * 100 : 0;
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -207,8 +210,14 @@ export default function CajaDetailPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card label="Monto inicial" value={formatMoney(initial)} muted="asignado a la caja" />
+        <Card
+          label={balance.isOverdrawn ? 'Saldo a favor' : 'Disponible'}
+          value={balance.amount}
+          muted={balance.isOverdrawn ? balance.caption : `${availablePct.toFixed(1)}% del monto`}
+          valueClass={balance.textClass}
+        />
         <Card label="Consumido" value={formatMoney(consumed)} muted={`${consumedPct.toFixed(1)}% del monto`} />
         <Card label="Legalizado" value={formatMoney(legalized)} muted={`${legalizedPct.toFixed(1)}% del monto`} />
         <Card
@@ -680,11 +689,21 @@ function EditBoxModal({
   );
 }
 
-function Card({ label, value, muted }: { label: string; value: string; muted: string }) {
+function Card({
+  label,
+  value,
+  muted,
+  valueClass = 'text-slate-900',
+}: {
+  label: string;
+  value: string;
+  muted: string;
+  valueClass?: string;
+}) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4">
       <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-slate-900 tabular-nums">{value}</p>
+      <p className={cn('mt-1 text-2xl font-semibold tabular-nums', valueClass)}>{value}</p>
       <p className="text-xs text-slate-500 tabular-nums">{muted}</p>
     </div>
   );

@@ -687,8 +687,15 @@ export default function DashboardPage() {
                           <td className="py-2.5 pr-3 text-right font-medium text-slate-700 tabular-nums">
                             {fmtCurrencyFull(b.initial_amount)}
                           </td>
-                          <td className="py-2.5 pr-3 text-right font-bold tabular-nums" style={{ color: barColor[b.threshold_alert].replace('bg-', '').includes('red') ? COLORS.red : barColor[b.threshold_alert].replace('bg-', '').includes('orange') ? COLORS.orange : barColor[b.threshold_alert].replace('bg-', '').includes('amber') ? COLORS.amber : COLORS.emerald }}>
-                            {fmtCurrencyFull(b.current_balance)}
+                          <td className="py-2.5 pr-3 text-right font-bold tabular-nums" style={{ color: b.current_balance < 0 ? COLORS.red : barColor[b.threshold_alert].replace('bg-', '').includes('red') ? COLORS.red : barColor[b.threshold_alert].replace('bg-', '').includes('orange') ? COLORS.orange : barColor[b.threshold_alert].replace('bg-', '').includes('amber') ? COLORS.amber : COLORS.emerald }}>
+                            {b.current_balance < 0 ? (
+                              <>
+                                {fmtCurrencyFull(Math.abs(b.current_balance))}
+                                <span className="block text-[10px] font-medium normal-case opacity-80">a favor</span>
+                              </>
+                            ) : (
+                              fmtCurrencyFull(b.current_balance)
+                            )}
                           </td>
                           <td className="py-2.5">
                             <div className="flex items-center gap-2">

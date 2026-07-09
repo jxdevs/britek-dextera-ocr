@@ -187,26 +187,28 @@ export class ApprovalsService {
         throw new BadRequestException('El total debe ser un número positivo');
       }
 
-      let newBalance = box.current_balance;
+      const previousBalance = parseFloat(box.current_balance);
 
-      if (boxWasPreAssigned) {
-        // WhatsApp flow: balance was already deducted at upload time.
-        // Only adjust if the approver edited the total.
-        if (Math.abs(finalTotal - originalTotal) > 0.01) {
-          const diff = originalTotal - finalTotal; // positive = approver lowered total → refund
-          const currentBalance = parseFloat(box.current_balance);
-          newBalance = (currentBalance + diff).toFixed(2);
-          await box.update({ current_balance: newBalance }, { transaction: t });
-        }
-      } else {
-        // Web flow: balance was NOT deducted yet. Deduct the final total now.
-        const currentBalance = parseFloat(box.current_balance);
-        if (currentBalance < finalTotal) {
-          throw new BadRequestException(
-            `Saldo insuficiente en la caja "${box.code}". Disponible: $${currentBalance.toFixed(2)}, requerido: $${finalTotal.toFixed(2)}.`,
-          );
-        }
-        newBalance = (currentBalance - finalTotal).toFixed(2);
+      // WhatsApp ya descontó el total al subir la factura: solo se ajusta lo que el
+      // aprobador haya editado. En el flujo web todavía no se ha descontado nada.
+      const balanceDelta = boxWasPreAssigned
+        ? originalTotal - finalTotal
+        : -finalTotal;
+      const balanceChanged = !boxWasPreAssigned || Math.abs(balanceDelta) > 0.01;
+      const newBalanceNum = previousBalance + balanceDelta;
+      const newBalance = newBalanceNum.toFixed(2);
+
+      // La caja queda (o se hunde más) en negativo: la empresa le queda debiendo al
+      // residente. Se permite, pero exige justificación escrita.
+      const isOverdraft = newBalanceNum < 0 && balanceDelta < 0;
+      if (isOverdraft && !dto.comments?.trim()) {
+        throw new BadRequestException(
+          `La factura excede el saldo de la caja "${box.code}". Disponible: $${previousBalance.toFixed(2)}, requerido: $${finalTotal.toFixed(2)}. ` +
+            `Se requiere un comentario justificando el saldo a favor del residente ($${Math.abs(newBalanceNum).toFixed(2)}).`,
+        );
+      }
+
+      if (balanceChanged) {
         await box.update({ current_balance: newBalance }, { transaction: t });
       }
 
@@ -234,8 +236,13 @@ export class ApprovalsService {
         entity: 'invoice',
         entityId: invoice.id,
         entityLabel: `${invoice.vendor_name ?? 'Sin proveedor'} - ${invoice.invoice_number ?? 'S/N'}`,
-        before: { status: invoice.status, total: invoice.total },
-        after: { status: 'approved', total: finalTotal.toFixed(2) },
+        before: { status: invoice.status, total: invoice.total, balance: previousBalance.toFixed(2) },
+        after: {
+          status: 'approved',
+          total: finalTotal.toFixed(2),
+          balance: newBalance,
+          overdraft: isOverdraft,
+        },
       });
     });
 

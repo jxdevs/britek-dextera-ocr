@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowLeft, Clock, Eye, Loader2, Lock } from 'lucide-reac
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { pettyCash, type Movement, type PettyCashBox } from '../lib/api';
-import { cn, formatMoney, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
+import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
 export default function MiCajaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -59,6 +59,9 @@ export default function MiCajaDetailPage() {
   const pendingCount = movements.filter((m) => m.status === 'pending').length;
   const consumedPct = initial > 0 ? (consumed / initial) * 100 : 0;
   const legalizedPct = initial > 0 ? (legalized / initial) * 100 : 0;
+  const available = parseFloat(box.current_balance);
+  const availablePct = initial > 0 ? (available / initial) * 100 : 0;
+  const balance = getBalanceDisplay(available);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -107,8 +110,14 @@ export default function MiCajaDetailPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card label="Monto inicial" value={formatMoney(initial)} muted="asignado a la caja" />
+        <Card
+          label={balance.isOverdrawn ? 'Saldo a tu favor' : 'Disponible'}
+          value={balance.amount}
+          muted={balance.isOverdrawn ? 'la empresa te lo debe' : `${availablePct.toFixed(1)}% del monto`}
+          valueClass={balance.textClass}
+        />
         <Card label="Consumido" value={formatMoney(consumed)} muted={`${consumedPct.toFixed(1)}% del monto`} />
         <Card label="Legalizado" value={formatMoney(legalized)} muted={`${legalizedPct.toFixed(1)}% del monto`} />
         <Card
@@ -261,11 +270,21 @@ export default function MiCajaDetailPage() {
   );
 }
 
-function Card({ label, value, muted }: { label: string; value: string; muted: string }) {
+function Card({
+  label,
+  value,
+  muted,
+  valueClass = 'text-slate-900',
+}: {
+  label: string;
+  value: string;
+  muted: string;
+  valueClass?: string;
+}) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4">
       <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-slate-900 tabular-nums">{value}</p>
+      <p className={cn('mt-1 text-2xl font-semibold tabular-nums', valueClass)}>{value}</p>
       <p className="text-xs text-slate-500 tabular-nums">{muted}</p>
     </div>
   );

@@ -181,10 +181,13 @@ export class WhatsappService {
       );
       return;
     }
-    const lines = boxes.map(
-      (b) =>
-        `• ${b.code} (${b.name}): $${formatCOP(b.current_balance)} disponible`,
-    );
+    const lines = boxes.map((b) => {
+      const balance = parseFloat(b.current_balance);
+      // Saldo negativo: gastó por encima del monto asignado y la empresa le debe.
+      return balance < 0
+        ? `• ${b.code} (${b.name}): $${formatCOP(Math.abs(balance).toFixed(2))} a tu favor`
+        : `• ${b.code} (${b.name}): $${formatCOP(b.current_balance)} disponible`;
+    });
     await this.kapso.sendText(
       worker.phone,
       `💰 *Tus cajas activas:*\n${lines.join('\n')}`,

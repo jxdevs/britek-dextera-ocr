@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { pettyCash, type PettyCashBox } from '../lib/api';
-import { cn, formatMoney, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
+import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
 export default function CajasPage() {
   const [items, setItems] = useState<PettyCashBox[]>([]);
@@ -148,6 +148,7 @@ function BoxCard({ box }: { box: PettyCashBox }) {
   const initial = parseFloat(box.initial_amount);
   const current = parseFloat(box.current_balance);
   const consumedPct = initial > 0 ? ((initial - current) / initial) * 100 : 0;
+  const balance = getBalanceDisplay(current);
 
   const primary = box.workers.find((w) => w.BoxAssignment.is_primary);
   const others = box.workers.filter((w) => !w.BoxAssignment.is_primary);
@@ -160,7 +161,9 @@ function BoxCard({ box }: { box: PettyCashBox }) {
       to={`/cajas/${box.id}`}
       className={cn(
         'block bg-white border rounded-lg hover:shadow-sm transition-all overflow-hidden',
-        consumption?.severity === 'depleted'
+        consumption?.severity === 'overdrawn'
+          ? 'border-rose-400 hover:border-rose-500'
+          : consumption?.severity === 'depleted'
           ? 'border-rose-300 hover:border-rose-400'
           : consumption?.severity === 'critical'
             ? 'border-orange-300 hover:border-orange-400'
@@ -216,11 +219,13 @@ function BoxCard({ box }: { box: PettyCashBox }) {
           </p>
         </div>
         <div className="text-right">
-          <p className="text-lg font-semibold tabular-nums text-slate-900">
-            {formatMoney(current)}
+          <p className={cn('text-lg font-semibold tabular-nums', balance.textClass)}>
+            {balance.amount}
           </p>
           <p className="text-xs text-slate-500 tabular-nums">
-            Legalizado {consumedPct.toFixed(0)}% · de {formatMoney(initial)}
+            {balance.isOverdrawn
+              ? balance.caption
+              : `Legalizado ${consumedPct.toFixed(0)}% · de ${formatMoney(initial)}`}
           </p>
           <div className="mt-1 w-32 bg-slate-100 rounded-full h-1 overflow-hidden">
             <div
@@ -253,21 +258,29 @@ function BoxCard({ box }: { box: PettyCashBox }) {
       {consumption && (
         <div className={cn(
           'flex items-center gap-2 px-5 py-1.5 text-[11px] font-medium border-t',
-          consumption.severity === 'depleted'
-            ? 'bg-rose-50 text-rose-700 border-rose-200'
-            : consumption.severity === 'critical'
-              ? 'bg-orange-50 text-orange-700 border-orange-200'
-              : 'bg-amber-50 text-amber-700 border-amber-200',
+          consumption.severity === 'overdrawn'
+            ? 'bg-rose-100 text-rose-900 border-rose-300'
+            : consumption.severity === 'depleted'
+              ? 'bg-rose-50 text-rose-700 border-rose-200'
+              : consumption.severity === 'critical'
+                ? 'bg-orange-50 text-orange-700 border-orange-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200',
         )}>
           <AlertTriangle className="size-3 shrink-0" />
           <span>
-            {consumption.severity === 'depleted'
-              ? 'Fondos casi agotados — prepare legalización'
-              : consumption.severity === 'critical'
-                ? 'Iniciar preparación de legalización'
-                : 'Revisar caja y preparar legalización'}
+            {consumption.severity === 'overdrawn'
+              ? 'Caja sobregirada — saldo a favor del residente'
+              : consumption.severity === 'depleted'
+                ? 'Fondos casi agotados — prepare legalización'
+                : consumption.severity === 'critical'
+                  ? 'Iniciar preparación de legalización'
+                  : 'Revisar caja y preparar legalización'}
           </span>
-          <span className="ml-auto tabular-nums">{consumption.remainingPct.toFixed(0)}% restante</span>
+          <span className="ml-auto tabular-nums">
+            {consumption.severity === 'overdrawn'
+              ? consumption.badgeLabel
+              : `${consumption.remainingPct.toFixed(0)}% restante`}
+          </span>
         </div>
       )}
     </Link>

@@ -189,7 +189,11 @@ export class InvoicesService {
     return invoice;
   }
 
-  /** Returns the cajas the worker can use right now: open + balance >= invoice total. */
+  /**
+   * Cajas abiertas asignadas al residente. `sufficient` indica si el saldo alcanza;
+   * las que no alcanzan también se devuelven, porque aprobar en negativo está
+   * permitido con justificación (deja saldo a favor del residente).
+   */
   async eligibleBoxesFor(invoiceId: string) {
     const invoice = await this.invoices.findByPk(invoiceId);
     if (!invoice) throw new NotFoundException('Factura no encontrada');

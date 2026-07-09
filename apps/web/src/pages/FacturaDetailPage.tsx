@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Loader2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AuthFilePreview } from '../components/AuthFilePreview';
@@ -123,6 +123,32 @@ export default function FacturaDetailPage() {
     () => (original && form ? Object.keys(buildDiff(original, form)).length > 0 : false),
     [original, form],
   );
+
+  /**
+   * Saldo que quedaría en `box` si se aprueba con el total que hay ahora en el
+   * formulario. Replica el cálculo de approvals.service: en el flujo de WhatsApp la
+   * caja ya venía descontada al subir, así que solo pesa la diferencia editada.
+   * Se calcula aquí y no se usa el `resulting_balance` del backend porque ese sale
+   * del total guardado, y el aprobador puede haberlo editado.
+   */
+  const project = useCallback(
+    (box: EligibleBox): { balance: number; delta: number } | null => {
+      if (!invoice || !form) return null;
+      const finalTotal = parseFloat(form.total);
+      if (!Number.isFinite(finalTotal)) return null;
+      const current = parseFloat(box.current_balance);
+      const delta = invoice.box_id ? parseFloat(invoice.total) - finalTotal : -finalTotal;
+      return { balance: current + delta, delta };
+    },
+    [invoice, form],
+  );
+
+  const selectedBox = boxes.find((b) => b.id === (invoice?.box_id ?? boxId));
+  const projection = selectedBox ? project(selectedBox) : null;
+  // Igual que el backend: solo exige justificación si la aprobación empuja el saldo
+  // hacia abajo. Bajar el total de una caja ya negativa la mejora, no la sobregira.
+  const willOverdraw = projection !== null && projection.balance < 0 && projection.delta < 0;
+  const needsJustification = willOverdraw && !comments.trim();
 
   const update = <K extends keyof EditableForm>(key: K, value: string) =>
     setForm((curr) => (curr ? { ...curr, [key]: value } : curr));
@@ -333,12 +359,18 @@ export default function FacturaDetailPage() {
                       className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
                     >
                       <option value="">Selecciona una caja…</option>
-                      {boxes.map((b) => (
-                        <option key={b.id} value={b.id} disabled={!b.sufficient}>
-                          {b.code} · {b.name} · {formatMoney(parseFloat(b.current_balance))}
-                          {!b.sufficient ? ' (saldo insuficiente)' : ''}
-                        </option>
-                      ))}
+                      {boxes.map((b) => {
+                        const p = project(b);
+                        const overdraws = p !== null && p.balance < 0;
+                        return (
+                          <option key={b.id} value={b.id}>
+                            {b.code} · {b.name} · {formatMoney(parseFloat(b.current_balance))}
+                            {overdraws
+                              ? ` (quedan ${formatMoney(Math.abs(p.balance))} a favor del residente)`
+                              : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                     {boxes.length === 0 && (
                       <p className="mt-1 text-xs text-rose-700">
@@ -348,15 +380,39 @@ export default function FacturaDetailPage() {
                   </>
                 )}
               </div>
+              {willOverdraw && projection && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">
+                  <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <p className="font-medium">
+                      Esta factura excede el saldo de la caja.
+                    </p>
+                    <p className="mt-0.5 opacity-90">
+                      Al aprobar, la caja quedará con {formatMoney(Math.abs(projection.balance))} a
+                      favor del residente. Escribe una justificación para continuar.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div>
-                <label className="text-xs font-medium text-slate-600">Comentarios (opcional)</label>
+                <label className="text-xs font-medium text-slate-600">
+                  {willOverdraw ? 'Justificación del saldo a favor (obligatoria)' : 'Comentarios (opcional)'}
+                </label>
                 <textarea
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
                   rows={2}
                   disabled={!!submitting}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  placeholder="Motivo de rechazo, anotaciones, etc."
+                  className={cn(
+                    'mt-1 w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900',
+                    needsJustification ? 'border-amber-400 bg-amber-50/40' : 'border-slate-300',
+                  )}
+                  placeholder={
+                    willOverdraw
+                      ? 'Explica por qué se autoriza el gasto por encima del saldo…'
+                      : 'Motivo de rechazo, anotaciones, etc.'
+                  }
                 />
               </div>
 
@@ -389,7 +445,8 @@ export default function FacturaDetailPage() {
                 <button
                   type="button"
                   onClick={() => decide('approve')}
-                  disabled={!!submitting || !boxId}
+                  disabled={!!submitting || !boxId || needsJustification}
+                  title={needsJustification ? 'Escribe la justificación del saldo a favor' : undefined}
                   className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-md disabled:opacity-50"
                 >
                   {submitting === 'approve' ? (
