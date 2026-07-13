@@ -17,6 +17,17 @@ const EMPTY: CreateWorkerInput = {
   role: 'worker',
 };
 
+/** Formato requerido: indicativo +57 y celular de 10 dígitos */
+const PHONE_RE = /^\+573\d{9}$/;
+
+/** Normaliza igual que el backend: quita separadores y agrega +57 si falta */
+function normalizePhone(raw: string): string {
+  const cleaned = raw.replace(/[\s\-().]/g, '').trim();
+  if (/^573\d{9}$/.test(cleaned)) return `+${cleaned}`;
+  if (/^3\d{9}$/.test(cleaned)) return `+57${cleaned}`;
+  return cleaned;
+}
+
 const ROLE_LABEL: Record<WorkerRole, string> = {
   admin: 'Admin',
   approver: 'Aprobador',
@@ -199,13 +210,20 @@ function WorkerModal({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    const phone = normalizePhone(form.phone);
+    if (!PHONE_RE.test(phone)) {
+      setError(
+        'El teléfono debe incluir el indicativo +57 seguido del celular de 10 dígitos (ej: +573001234567). Sin el indicativo, WhatsApp no reconocerá al residente.',
+      );
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const payload: CreateWorkerInput = {
         document_number: form.document_number.trim(),
         name: form.name.trim(),
-        phone: form.phone.trim(),
+        phone,
         email: form.email?.trim() || null,
         role: form.role,
       };
@@ -251,13 +269,20 @@ function WorkerModal({
               value={form.document_number}
               onChange={(v) => update('document_number', v)}
             />
-            <Field
-              label="Teléfono (con código país)"
-              required
-              placeholder="+573001234567"
-              value={form.phone}
-              onChange={(v) => update('phone', v)}
-            />
+            <div>
+              <Field
+                label="Teléfono (con indicativo +57)"
+                required
+                placeholder="+573001234567"
+                value={form.phone}
+                onChange={(v) => update('phone', v)}
+              />
+              {form.phone.trim() !== '' && !PHONE_RE.test(normalizePhone(form.phone)) && (
+                <p className="mt-1 text-xs text-amber-600">
+                  Debe iniciar con +57 seguido del celular de 10 dígitos
+                </p>
+              )}
+            </div>
             <Field
               label="Email"
               type="email"
