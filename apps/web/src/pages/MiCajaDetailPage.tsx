@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Clock, Eye, Loader2, Lock } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Clock, Loader2, Lock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { pettyCash, type Movement, type PettyCashBox } from '../lib/api';

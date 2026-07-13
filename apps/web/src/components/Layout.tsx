@@ -1,4 +1,4 @@
-import { BarChart3, FileText, LogOut, MessageSquare, Receipt, ScanLine, ScrollText, Users, Wallet } from 'lucide-react';
+import { BarChart3, FileText, LogOut, Receipt, ScrollText, Users, Wallet } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { cn } from '../lib/utils';

@@ -8,6 +8,7 @@ import {
   Worker,
 } from '../../database/models';
 import { StorageModule } from '../storage/storage.module';
+import { LegalizationExportService } from './legalization-export.service';
 import { PettyCashController } from './petty-cash.controller';
 import { PettyCashService } from './petty-cash.service';
 
@@ -17,7 +18,7 @@ import { PettyCashService } from './petty-cash.service';
     StorageModule,
   ],
   controllers: [PettyCashController],
-  providers: [PettyCashService],
+  providers: [PettyCashService, LegalizationExportService],
   exports: [PettyCashService],
 })
 export class PettyCashModule {}

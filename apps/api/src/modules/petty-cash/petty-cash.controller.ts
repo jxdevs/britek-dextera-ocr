@@ -7,8 +7,11 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   AuthUser,
   CurrentUser,
@@ -19,12 +22,16 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { AssignWorkersDto } from './dto/assign-workers.dto';
 import { CreateBoxDto } from './dto/create-box.dto';
 import { UpdateBoxDto } from './dto/update-box.dto';
+import { LegalizationExportService } from './legalization-export.service';
 import { PettyCashService } from './petty-cash.service';
 
 @Controller('petty-cash')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PettyCashController {
-  constructor(private readonly service: PettyCashService) {}
+  constructor(
+    private readonly service: PettyCashService,
+    private readonly exportService: LegalizationExportService,
+  ) {}
 
   @Get('mine')
   @Roles('worker')
@@ -100,6 +107,21 @@ export class PettyCashController {
   @Roles('admin', 'approver')
   movements(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.movements(id);
+  }
+
+  @Get(':id/export')
+  @Roles('admin', 'approver')
+  async export(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { buffer, filename } = await this.exportService.buildWorkbook(id);
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    return new StreamableFile(buffer);
   }
 
   @Delete(':id/movements/:invoiceId')

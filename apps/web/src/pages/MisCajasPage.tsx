@@ -1,4 +1,4 @@
-import { AlertTriangle, Calendar, ChevronRight, Clock, Loader2, User, Users } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronRight, Loader2, User, Users } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { pettyCash, type PettyCashBox } from '../lib/api';

@@ -1,8 +1,7 @@
-import { AlertTriangle, ArrowLeft, Check, Clock, Eye, Loader2, Lock, Pencil, Settings, Star, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Clock, Eye, FileSpreadsheet, Loader2, Lock, Settings, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { BoxFormModal } from '../components/BoxFormModal';
-import { approvals as approvalsApi, pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
+import { approvals as approvalsApi, fetchBlobWithAuth, pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
@@ -17,10 +16,10 @@ export default function CajaDetailPage() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
   const [editingBox, setEditingBox] = useState(false);
   const [closing, setClosing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -53,6 +52,26 @@ export default function CajaDetailPage() {
       alert(err instanceof Error ? err.message : 'Error');
     } finally {
       setClosing(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!box) return;
+    setExporting(true);
+    try {
+      const blob = await fetchBlobWithAuth(`/petty-cash/${box.id}/export`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `legalizacion-${box.code}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al exportar');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -132,8 +151,20 @@ export default function CajaDetailPage() {
             </p>
           )}
         </div>
-        {canEdit && box.status === 'open' && (
-          <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {canApprove && (
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting}
+              className="inline-flex items-center gap-1.5 rounded-md border border-teal-300 bg-teal-50 hover:bg-teal-100 px-3 py-2 text-sm font-medium text-teal-700 disabled:opacity-50"
+            >
+              {exporting ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
+              Exportar Excel
+            </button>
+          )}
+          {canEdit && box.status === 'open' && (
+            <>
             <button
               type="button"
               onClick={() => setEditingBox(true)}
@@ -171,10 +202,10 @@ export default function CajaDetailPage() {
               {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
               Eliminar
             </button>
-          </div>
-        )}
-        {canEdit && (box.status === 'closed' || box.status === 'blocked') && (
-          <div className="flex gap-2">
+            </>
+          )}
+          {canEdit && (box.status === 'closed' || box.status === 'blocked') && (
+            <>
             {box.status === 'blocked' && (
               <button
                 type="button"
@@ -206,8 +237,9 @@ export default function CajaDetailPage() {
               {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
               Eliminar caja
             </button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

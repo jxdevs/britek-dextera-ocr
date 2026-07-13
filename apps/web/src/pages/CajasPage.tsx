@@ -1,4 +1,4 @@
-import { AlertTriangle, Calendar, ChevronRight, Clock, Filter, Loader2, Plus, Users, User } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronRight, Filter, Loader2, Plus, Users, User } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';

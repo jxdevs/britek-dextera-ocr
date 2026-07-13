@@ -30,7 +30,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
 
   const [code, setCode] = useState(initial?.code ?? '');
   const [name, setName] = useState(initial?.name ?? '');
-  const [type, setType] = useState<BoxType>(lockedType ?? initial?.type ?? 'individual');
+  const [type] = useState<BoxType>(lockedType ?? initial?.type ?? 'individual');
   const [amount, setAmount] = useState<string>(
     initial?.initial_amount ? String(initial.initial_amount) : '',
   );
@@ -290,7 +290,6 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
               ) : (
                 allWorkers.filter((w) => w.role === 'worker').map((w) => {
                   const isSelected = selected.includes(w.id);
-                  const isPrimary = primary === w.id;
                   const busyBoxCode = busyWorkers.get(w.id);
                   const isDisabled = mode === 'create' && !!busyBoxCode;
                   return (
