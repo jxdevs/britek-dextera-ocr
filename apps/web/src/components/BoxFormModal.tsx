@@ -21,6 +21,12 @@ interface Props {
   onSubmit: (input: CreateBoxInput) => Promise<void>;
 }
 
+/** Cajas activas de un residente: abiertas (códigos) y bloqueada si existe */
+interface BusyInfo {
+  openCodes: string[];
+  blockedCode: string | null;
+}
+
 export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubmit }: Props) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -42,12 +48,17 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busyWorkers, setBusyWorkers] = useState<Map<string, string>>(new Map());
+  const [busyWorkers, setBusyWorkers] = useState<Map<string, BusyInfo>>(new Map());
 
   const MAX_AMOUNT = 1_000_000;
   const amountExceedsLimit = parseInt(amount || '0', 10) > MAX_AMOUNT;
-  // Los admins pueden superar el tope si proporcionan una justificación
-  const amountBlocked = amountExceedsLimit && (!isAdmin || exceptionJustification.trim().length < 10);
+  // Segunda caja: hay algún residente seleccionado que ya tiene una caja abierta
+  const selectedNeedsSecondBox =
+    mode === 'create' &&
+    selected.some((id) => (busyWorkers.get(id)?.openCodes.length ?? 0) >= 1);
+  // Los admins pueden superar el tope o abrir segunda caja si justifican
+  const needsException = amountExceedsLimit || selectedNeedsSecondBox;
+  const exceptionBlocked = needsException && (!isAdmin || exceptionJustification.trim().length < 10);
 
   useEffect(() => {
     const loadData = async () => {
@@ -57,13 +68,15 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
           mode === 'create' ? pettyCash.list() : Promise.resolve([] as PettyCashBox[]),
         ]);
         setAllWorkers(w);
-        // Construir mapa de worker_id → código de caja para residentes que ya tienen una caja abierta
-        const busy = new Map<string, string>();
+        // Mapa de worker_id → cajas activas (abiertas y bloqueadas) del residente
+        const busy = new Map<string, BusyInfo>();
         for (const box of boxes) {
-          if (box.status === 'open') {
-            for (const bw of box.workers) {
-              busy.set(bw.id, box.code);
-            }
+          if (box.status !== 'open' && box.status !== 'blocked') continue;
+          for (const bw of box.workers) {
+            const info = busy.get(bw.id) ?? { openCodes: [], blockedCode: null };
+            if (box.status === 'open') info.openCodes.push(box.code);
+            else info.blockedCode = box.code;
+            busy.set(bw.id, info);
           }
         }
         setBusyWorkers(busy);
@@ -112,8 +125,8 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
         worker_ids: selected,
         primary_worker_id: type === 'shared' ? primary : selected[0],
       };
-      // Incluir justificación de excepción cuando el admin supera el tope
-      if (amountExceedsLimit && isAdmin) {
+      // Incluir justificación de excepción (tope de monto y/o segunda caja)
+      if (needsException && isAdmin) {
         input.exception_justification = exceptionJustification.trim();
       }
       await onSubmit(input);
@@ -290,8 +303,15 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
               ) : (
                 allWorkers.filter((w) => w.role === 'worker').map((w) => {
                   const isSelected = selected.includes(w.id);
-                  const busyBoxCode = busyWorkers.get(w.id);
-                  const isDisabled = mode === 'create' && !!busyBoxCode;
+                  const busyInfo = busyWorkers.get(w.id);
+                  const openCodes = busyInfo?.openCodes ?? [];
+                  const blockedCode = busyInfo?.blockedCode ?? null;
+                  // Bloqueado siempre: caja bloqueada, tope de 2 cajas, o no-admin con caja abierta
+                  const isDisabled =
+                    mode === 'create' &&
+                    (!!blockedCode ||
+                      openCodes.length >= 2 ||
+                      (openCodes.length === 1 && !isAdmin));
                   return (
                     <div
                       key={w.id}
@@ -319,8 +339,22 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
                             (Residente)
                           </span>
                         </p>
-                        {isDisabled ? (
-                          <p className="text-xs text-rose-500">Ya tiene caja abierta: {busyBoxCode}</p>
+                        {mode === 'create' && blockedCode ? (
+                          <p className="text-xs text-rose-500">
+                            Tiene caja bloqueada: {blockedCode} — debe legalizarla y cerrarla primero
+                          </p>
+                        ) : mode === 'create' && openCodes.length >= 2 ? (
+                          <p className="text-xs text-rose-500">
+                            Ya tiene {openCodes.length} cajas abiertas (máximo permitido)
+                          </p>
+                        ) : mode === 'create' && openCodes.length === 1 ? (
+                          isAdmin ? (
+                            <p className="text-xs text-amber-600">
+                              Ya tiene caja abierta: {openCodes[0]} — la segunda caja requiere justificación
+                            </p>
+                          ) : (
+                            <p className="text-xs text-rose-500">Ya tiene caja abierta: {openCodes[0]}</p>
+                          )
                         ) : (
                           <p className="text-xs text-slate-500 tabular-nums">{w.phone}</p>
                         )}
@@ -351,6 +385,34 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
             </div>
           </div>
 
+          {selectedNeedsSecondBox && isAdmin && (
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-md">
+              <p className="text-xs text-amber-800 font-medium mb-1.5">
+                ⚠️ El residente seleccionado ya tiene una caja abierta — la segunda caja se creará como excepción y requiere justificación
+              </p>
+              {amountExceedsLimit ? (
+                <p className="text-xs text-amber-700">
+                  La justificación del campo de monto aplica también para esta excepción.
+                </p>
+              ) : (
+                <>
+                  <textarea
+                    value={exceptionJustification}
+                    onChange={(e) => setExceptionJustification(e.target.value)}
+                    placeholder="Explique por qué el residente necesita una segunda caja abierta (mín. 10 caracteres)"
+                    rows={2}
+                    className="w-full rounded-md border border-amber-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                  />
+                  {exceptionJustification.trim().length > 0 && exceptionJustification.trim().length < 10 && (
+                    <p className="mt-1 text-xs text-amber-600">
+                      La justificación debe tener al menos 10 caracteres ({exceptionJustification.trim().length}/10)
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {error && (
             <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
               {error}
@@ -367,7 +429,7 @@ export function BoxFormModal({ mode, title, initial, lockedType, onClose, onSubm
             </button>
             <button
               type="submit"
-              disabled={!valid || saving || amountBlocked}
+              disabled={!valid || saving || exceptionBlocked}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-50 rounded-md"
             >
               {saving && <Loader2 className="size-3.5 animate-spin" />}

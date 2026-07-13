@@ -27,6 +27,8 @@ import { UpdateBoxDto } from './dto/update-box.dto';
 const MAX_BOX_AMOUNT = 1_000_000;
 /** Días de plazo para legalizar una caja */
 const BOX_DEADLINE_DAYS = 7;
+/** Máximo de cajas abiertas por residente (la segunda solo como excepción de admin) */
+const MAX_OPEN_BOXES_PER_WORKER = 2;
 
 @Injectable()
 export class PettyCashService {
@@ -181,7 +183,11 @@ export class PettyCashService {
 
     await this.assertWorkersExist(dto.worker_ids);
     // ── Regla 1b: No abrir si hay caja abierta O cajas con facturas sin legalizar ──
-    await this.assertNoOpenBoxForWorkers(dto.worker_ids);
+    // Un admin puede abrir una SEGUNDA caja como excepción justificada.
+    const usedSecondBoxException = await this.assertNoOpenBoxForWorkers(
+      dto.worker_ids,
+      { user, justification: dto.exception_justification },
+    );
     await this.assertPreviousBoxesFullyLegalized(dto.worker_ids);
 
     const openedAt = new Date();
@@ -226,6 +232,11 @@ export class PettyCashService {
         initial_amount: dto.initial_amount, expires_at: expiresAt.toISOString(),
       };
       if (dto.initial_amount > MAX_BOX_AMOUNT) {
+        auditAfter.exception_justification = dto.exception_justification;
+        auditAfter.exception_approved_by = user.name;
+      }
+      if (usedSecondBoxException) {
+        auditAfter.second_box_exception = true;
         auditAfter.exception_justification = dto.exception_justification;
         auditAfter.exception_approved_by = user.name;
       }
@@ -356,6 +367,9 @@ export class PettyCashService {
       );
     }
     await this.assertWorkersExist(dto.worker_ids);
+    // La reasignación no admite excepción de segunda caja: los nuevos
+    // residentes no pueden tener otra caja abierta (se excluye esta caja).
+    await this.assertNoOpenBoxForWorkers(dto.worker_ids, undefined, id);
 
     // Verificar que la caja no tenga movimientos — inmutabilidad de asignación
     const invoiceCount = await this.invoices.count({ where: { box_id: id } });
@@ -547,11 +561,28 @@ export class PettyCashService {
     }
   }
 
-  private async assertNoOpenBoxForWorkers(workerIds: string[]) {
+  /**
+   * Regla 1b: un residente solo puede tener una caja abierta. Un admin puede
+   * abrir una SEGUNDA caja como excepción incluyendo una justificación
+   * (máximo MAX_OPEN_BOXES_PER_WORKER). Las cajas bloqueadas nunca admiten
+   * excepción: deben legalizarse y cerrarse primero.
+   *
+   * Retorna true cuando la creación procede gracias a la excepción.
+   */
+  private async assertNoOpenBoxForWorkers(
+    workerIds: string[],
+    exception?: { user: AuthUser; justification?: string },
+    excludeBoxId?: string,
+  ): Promise<boolean> {
+    const where: Record<string, unknown> = {
+      status: { [Op.in]: ['open', 'blocked'] },
+    };
+    if (excludeBoxId) where.id = { [Op.ne]: excludeBoxId };
+
     // Find open boxes that have any of the given workers assigned
     const openBoxes = await this.boxes.findAll({
-      where: { status: { [Op.in]: ['open', 'blocked'] } },
-      attributes: ['id', 'code', 'name'],
+      where,
+      attributes: ['id', 'code', 'name', 'status'],
       include: [
         {
           model: Worker,
@@ -563,15 +594,52 @@ export class PettyCashService {
       ],
     });
 
-    if (openBoxes.length > 0) {
+    if (openBoxes.length === 0) return false;
+
+    // Una caja bloqueada nunca admite excepción: primero se legaliza y cierra
+    const blockedBox = openBoxes.find((b) => b.status === 'blocked');
+    if (blockedBox) {
+      const names = [
+        ...new Set((blockedBox as any).workers.map((w: Worker) => w.name)),
+      ].join(', ');
+      throw new ConflictException(
+        `El residente ${names} tiene una caja bloqueada (${blockedBox.code}) por vencimiento de plazo. Debe legalizarla y cerrarla antes de abrir otra.`,
+      );
+    }
+
+    // Conteo de cajas abiertas por residente para aplicar el tope duro
+    const countByWorker = new Map<string, { name: string; count: number }>();
+    for (const box of openBoxes) {
+      for (const w of (box as any).workers as Worker[]) {
+        const entry = countByWorker.get(w.id) ?? { name: w.name, count: 0 };
+        entry.count++;
+        countByWorker.set(w.id, entry);
+      }
+    }
+    const atLimit = [...countByWorker.values()].find(
+      (e) => e.count >= MAX_OPEN_BOXES_PER_WORKER,
+    );
+    if (atLimit) {
+      throw new ConflictException(
+        `El residente ${atLimit.name} ya tiene ${MAX_OPEN_BOXES_PER_WORKER} cajas abiertas, el máximo permitido incluso con excepción. Debe cerrar una antes de abrir otra.`,
+      );
+    }
+
+    const canUseException =
+      exception?.user.role === 'admin' &&
+      (exception.justification?.trim().length ?? 0) > 0;
+
+    if (!canUseException) {
       const workerNames = openBoxes
         .flatMap((b) => (b as any).workers.map((w: Worker) => w.name));
       const uniqueNames = [...new Set(workerNames)].join(', ');
       const boxCode = openBoxes[0].code;
       throw new ConflictException(
-        `El residente ${uniqueNames} ya tiene una caja abierta (${boxCode}). Debe cerrarla antes de abrir otra.`,
+        `El residente ${uniqueNames} ya tiene una caja abierta (${boxCode}). Debe cerrarla antes de abrir otra. Un admin puede abrir una segunda caja como excepción incluyendo una justificación.`,
       );
     }
+
+    return true;
   }
 
   // ── Regla 1b: Verificar que cajas cerradas anteriores estén 100% legalizadas ──

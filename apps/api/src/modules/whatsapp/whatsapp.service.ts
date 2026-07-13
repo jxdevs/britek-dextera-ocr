@@ -370,6 +370,25 @@ export class WhatsappService {
 
     const total = parseFloat(invoice.total);
 
+    // Excepción de segunda caja: con más de una caja abierta NO se auto-asigna.
+    // La factura pasa a 'observed' (sin caja ni descuento de saldo) para que
+    // un admin elija la caja correcta al aprobarla en el web.
+    if (workerBoxes.length > 1) {
+      await invoice.update({ status: 'observed' });
+      this.clearSession(worker.phone);
+      const codes = workerBoxes.map((b) => `${b.code} (${b.name})`).join(', ');
+      this.logger.log(
+        `Factura ${invoice.id} → observada sin caja: el residente ${worker.name} tiene ${workerBoxes.length} cajas abiertas`,
+      );
+      await this.kapso.sendText(
+        worker.phone,
+        `✅ *Factura registrada*\n` +
+          `• Monto: $${formatCOP(total)} COP\n\n` +
+          `Tienes ${workerBoxes.length} cajas abiertas (${codes}), por lo que un administrador asignará la caja correspondiente al aprobarla. Aún no se ha descontado saldo de ninguna caja.`,
+      );
+      return;
+    }
+
     // Find first box with sufficient balance
     const box = workerBoxes.find(
       (b) => parseFloat(b.current_balance) >= total,
