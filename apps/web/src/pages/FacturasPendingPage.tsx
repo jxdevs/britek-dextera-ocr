@@ -1,9 +1,9 @@
-import { Loader2, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthImage } from '../components/AuthImage';
 import { InvoiceUploadModal } from '../components/InvoiceUploadModal';
-import { invoices as invoicesApi, type Invoice, type InvoiceStatus, type ExpenseCategory } from '../lib/api';
+import { invoices as invoicesApi, workers as workersApi, type Invoice, type InvoiceStatus, type ExpenseCategory, type Worker } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cn, formatMoney } from '../lib/utils';
 
@@ -28,6 +28,14 @@ const STATUS_LABEL: Record<InvoiceStatus, string> = {
   rejected: 'Rechazada',
 };
 
+/** Normaliza texto para búsqueda: minúsculas y sin tildes */
+function normalize(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
+}
+
 const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
   combustible: 'Combustible',
   transporte: 'Transporte',
@@ -48,6 +56,9 @@ export default function FacturasPendingPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [workerFilter, setWorkerFilter] = useState('');
+  const [workersList, setWorkersList] = useState<Worker[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,6 +75,23 @@ export default function FacturasPendingPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    workersApi.list().then(setWorkersList).catch(() => {});
+  }, []);
+
+  const hasFilters = !!search.trim() || !!workerFilter;
+  const filteredItems = useMemo(() => {
+    const q = normalize(search.trim());
+    return items.filter((inv) => {
+      if (workerFilter && inv.worker_id !== workerFilter) return false;
+      if (!q) return true;
+      const haystack = normalize(
+        `${inv.vendor_name ?? ''} ${inv.vendor_nit ?? ''} ${inv.invoice_number ?? ''}`,
+      );
+      return haystack.includes(q);
+    });
+  }, [items, search, workerFilter]);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
@@ -101,6 +129,51 @@ export default function FacturasPendingPage() {
         ))}
       </div>
 
+      {/* Buscador y filtro por residente */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por empresa, NIT o número de factura…"
+            className="w-full rounded-md border border-slate-300 bg-white pl-9 pr-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400"
+          />
+        </div>
+        <select
+          value={workerFilter}
+          onChange={(e) => setWorkerFilter(e.target.value)}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 min-w-[200px]"
+        >
+          <option value="">Todos los residentes</option>
+          {workersList
+            .filter((w) => w.role === 'worker')
+            .map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+        </select>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setWorkerFilter('');
+            }}
+            className="text-xs text-slate-500 hover:text-slate-700 underline"
+          >
+            Limpiar filtros
+          </button>
+        )}
+        {hasFilters && !loading && (
+          <span className="text-xs text-slate-500">
+            {filteredItems.length} de {items.length} factura(s)
+          </span>
+        )}
+      </div>
+
       {error && (
         <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-sm text-rose-800">
           {error}
@@ -119,9 +192,13 @@ export default function FacturasPendingPage() {
               ? 'No hay facturas observadas (requiriendo aprobación de admin).'
               : 'Sin facturas en este estado.'}
         </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-lg py-12 text-center text-sm text-slate-500">
+          No hay facturas que coincidan con la búsqueda o los filtros.
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {items.map((inv) => (
+          {filteredItems.map((inv) => (
             <div key={inv.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:shadow-sm hover:border-slate-300 transition-all flex flex-col relative">
               {status === 'rejected' && user?.role === 'admin' && (
                 <button

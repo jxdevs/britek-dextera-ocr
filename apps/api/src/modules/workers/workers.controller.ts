@@ -24,11 +24,13 @@ export class WorkersController {
   constructor(private readonly service: WorkersService) {}
 
   @Get()
+  @Roles('admin', 'approver')
   list() {
     return this.service.list();
   }
 
   @Get(':id')
+  @Roles('admin', 'approver')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
   }
