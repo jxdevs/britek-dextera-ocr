@@ -86,7 +86,15 @@ interface TimelyReporting {
   on_time_pct: number;
 }
 
+interface BoxesByStatus {
+  open: number;
+  closed: number;
+  blocked: number;
+  total: number;
+}
+
 export interface DashboardKpis {
+  boxes_by_status: BoxesByStatus;
   delivered_vs_legalized: DeliveredVsLegalized;
   support_composition: SupportComposition;
   amount_at_risk: AmountAtRisk;
@@ -115,6 +123,7 @@ export class DashboardService {
 
   async getKpis(filters: DashboardKpisDto): Promise<DashboardKpis> {
     const [
+      boxes_by_status,
       delivered_vs_legalized,
       support_composition,
       amount_at_risk,
@@ -125,6 +134,7 @@ export class DashboardService {
       expiring_boxes,
       timely_reporting,
     ] = await Promise.all([
+      this.getBoxesByStatus(filters),
       this.getDeliveredVsLegalized(filters),
       this.getSupportComposition(filters),
       this.getAmountAtRisk(filters),
@@ -137,6 +147,7 @@ export class DashboardService {
     ]);
 
     return {
+      boxes_by_status,
       delivered_vs_legalized,
       support_composition,
       amount_at_risk,
@@ -147,6 +158,28 @@ export class DashboardService {
       expiring_boxes,
       timely_reporting,
     };
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // 0. CAJAS POR ESTADO
+  // ════════════════════════════════════════════════════════════════
+
+  private async getBoxesByStatus(filters: DashboardKpisDto): Promise<BoxesByStatus> {
+    const rows = (await this.boxes.findAll({
+      where: this.buildBoxWhere(filters),
+      attributes: ['status', [fn('COUNT', col('id')), 'count']],
+      group: ['status'],
+      raw: true,
+    })) as unknown as Array<{ status: string; count: string }>;
+
+    const counts: BoxesByStatus = { open: 0, closed: 0, blocked: 0, total: 0 };
+    for (const row of rows) {
+      if (row.status === 'open' || row.status === 'closed' || row.status === 'blocked') {
+        counts[row.status] = parseInt(row.count, 10) || 0;
+      }
+    }
+    counts.total = counts.open + counts.closed + counts.blocked;
+    return counts;
   }
 
   // ════════════════════════════════════════════════════════════════

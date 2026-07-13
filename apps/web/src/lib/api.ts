@@ -510,7 +510,15 @@ export interface TimelyReporting {
   on_time_pct: number;
 }
 
+export interface BoxesByStatus {
+  open: number;
+  closed: number;
+  blocked: number;
+  total: number;
+}
+
 export interface DashboardKpis {
+  boxes_by_status: BoxesByStatus;
   delivered_vs_legalized: DeliveredVsLegalized;
   support_composition: SupportComposition;
   amount_at_risk: AmountAtRisk;

@@ -2,7 +2,7 @@ import { AlertTriangle, Calendar, ChevronRight, Filter, Loader2, Plus, Users, Us
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
-import { pettyCash, type PettyCashBox } from '../lib/api';
+import { pettyCash, type BoxStatus, type PettyCashBox } from '../lib/api';
 import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
 export default function CajasPage() {
@@ -11,6 +11,7 @@ export default function CajasPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [workerFilter, setWorkerFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'' | BoxStatus>('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,11 +42,17 @@ export default function CajasPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [items]);
 
-  // Filter boxes by selected worker
-  const filteredItems = useMemo(() => {
-    if (!workerFilter) return items;
-    return items.filter((box) => box.workers.some((w) => w.id === workerFilter));
-  }, [items, workerFilter]);
+  // Filter boxes by selected worker and status
+  const hasFilters = !!workerFilter || !!statusFilter;
+  const filteredItems = useMemo(
+    () =>
+      items.filter(
+        (box) =>
+          (!workerFilter || box.workers.some((w) => w.id === workerFilter)) &&
+          (!statusFilter || box.status === statusFilter),
+      ),
+    [items, workerFilter, statusFilter],
+  );
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -68,10 +75,10 @@ export default function CajasPage() {
 
       {/* Filter bar */}
       {!loading && items.length > 0 && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 text-sm text-slate-600">
             <Filter className="size-4" />
-            <span className="font-medium">Filtrar por residente:</span>
+            <span className="font-medium">Filtrar:</span>
           </div>
           <select
             value={workerFilter}
@@ -85,16 +92,29 @@ export default function CajasPage() {
               </option>
             ))}
           </select>
-          {workerFilter && (
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as '' | BoxStatus)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 min-w-[160px]"
+          >
+            <option value="">Todas</option>
+            <option value="open">Abiertas</option>
+            <option value="closed">Cerradas</option>
+            <option value="blocked">Bloqueadas</option>
+          </select>
+          {hasFilters && (
             <button
               type="button"
-              onClick={() => setWorkerFilter('')}
+              onClick={() => {
+                setWorkerFilter('');
+                setStatusFilter('');
+              }}
               className="text-xs text-slate-500 hover:text-slate-700 underline"
             >
-              Limpiar filtro
+              Limpiar filtros
             </button>
           )}
-          {workerFilter && (
+          {hasFilters && (
             <span className="text-xs text-slate-500">
               {filteredItems.length} de {items.length} caja(s)
             </span>
@@ -118,7 +138,7 @@ export default function CajasPage() {
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-lg py-12 text-center text-sm text-slate-500">
-          No hay cajas para el residente seleccionado.
+          No hay cajas que coincidan con los filtros seleccionados.
         </div>
       ) : (
         <div className="grid gap-3">

@@ -11,9 +11,11 @@ import {
   Filter,
   Eye,
   FileWarning,
+  Lock,
   RefreshCw,
   Shield,
   Users,
+  Wallet,
   XCircle,
 } from 'lucide-react';
 import {
@@ -441,6 +443,52 @@ export default function DashboardPage() {
       {/* Dashboard Content */}
       {data && (
         <div className={cn('space-y-6', loading && 'opacity-60 pointer-events-none transition-opacity')}>
+          {/* ── Alerta de cajas bloqueadas ── */}
+          {data.boxes_by_status.blocked > 0 && (
+            <div
+              className="flex items-center gap-3 rounded-xl border border-red-300 bg-red-50 px-5 py-3.5 cursor-pointer hover:bg-red-100 transition-colors"
+              onClick={() => navigate('/cajas')}
+            >
+              <div className="p-2 rounded-lg bg-red-100 ring-1 ring-red-300">
+                <Lock className="size-5 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-red-800">
+                  {data.boxes_by_status.blocked} caja{data.boxes_by_status.blocked !== 1 ? 's' : ''} bloqueada{data.boxes_by_status.blocked !== 1 ? 's' : ''} por vencimiento de plazo
+                </p>
+                <p className="text-xs text-red-600 mt-0.5">
+                  Superaron el plazo de legalización sin cerrarse. Requieren legalización y cierre por un administrador.
+                </p>
+              </div>
+              <Eye className="size-4 text-red-500" />
+            </div>
+          )}
+
+          {/* ── Row 0: Cajas por estado ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <KpiCard
+              label="Cajas Abiertas"
+              value={String(data.boxes_by_status.open)}
+              subtitle={`de ${data.boxes_by_status.total} caja${data.boxes_by_status.total !== 1 ? 's' : ''} en total`}
+              icon={Wallet}
+              color="emerald"
+            />
+            <KpiCard
+              label="Cajas Cerradas"
+              value={String(data.boxes_by_status.closed)}
+              subtitle="ciclo de legalización terminado"
+              icon={Lock}
+              color="sky"
+            />
+            <KpiCard
+              label="Cajas Bloqueadas"
+              value={String(data.boxes_by_status.blocked)}
+              subtitle={data.boxes_by_status.blocked > 0 ? 'requieren atención inmediata' : 'sin cajas vencidas'}
+              icon={AlertTriangle}
+              color={data.boxes_by_status.blocked > 0 ? 'red' : 'emerald'}
+            />
+          </div>
+
           {/* ── Row 1: KPI Cards ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard
