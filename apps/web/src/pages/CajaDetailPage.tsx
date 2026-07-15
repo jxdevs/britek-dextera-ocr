@@ -102,7 +102,12 @@ export default function CajaDetailPage() {
   const activeMovements = movements.filter((m) => m.status !== 'rejected');
   const consumed = activeMovements.reduce((sum, m) => sum + parseFloat(m.total), 0);
   const legalized = movements.filter((m) => m.status === 'approved').reduce((sum, m) => sum + parseFloat(m.total), 0);
-  const pendingCount = movements.filter((m) => m.status === 'pending').length;
+  const pendingMovements = movements.filter((m) => m.status === 'pending');
+  const rejectedMovements = movements.filter((m) => m.status === 'rejected');
+  const pendingAmount = pendingMovements.reduce((sum, m) => sum + parseFloat(m.total), 0);
+  const rejectedAmount = rejectedMovements.reduce((sum, m) => sum + parseFloat(m.total), 0);
+  const pendingCount = pendingMovements.length;
+  const rejectedCount = rejectedMovements.length;
   const consumedPct = initial > 0 ? (consumed / initial) * 100 : 0;
   const legalizedPct = initial > 0 ? (legalized / initial) * 100 : 0;
   const availablePct = initial > 0 ? (available / initial) * 100 : 0;
@@ -242,7 +247,7 @@ export default function CajaDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         <Card label="Monto inicial" value={formatMoney(initial)} muted="asignado a la caja" />
         <Card
           label={balance.isOverdrawn ? 'Saldo a favor' : 'Disponible'}
@@ -250,12 +255,23 @@ export default function CajaDetailPage() {
           muted={balance.isOverdrawn ? balance.caption : `${availablePct.toFixed(1)}% del monto`}
           valueClass={balance.textClass}
         />
-        <Card label="Consumido" value={formatMoney(consumed)} muted={`${consumedPct.toFixed(1)}% del monto`} />
+        <Card
+          label="Total en facturas"
+          value={formatMoney(consumed)}
+          muted={`legalizadas + pendientes · ${consumedPct.toFixed(1)}% del monto`}
+        />
         <Card label="Legalizado" value={formatMoney(legalized)} muted={`${legalizedPct.toFixed(1)}% del monto`} />
         <Card
-          label="Pendientes de legalizar"
-          value={String(pendingCount)}
-          muted={pendingCount > 0 ? 'facturas por revisar' : 'todo legalizado'}
+          label="Pendiente por legalizar"
+          value={formatMoney(pendingAmount)}
+          muted={pendingCount > 0 ? `${pendingCount} ${pendingCount === 1 ? 'factura' : 'facturas'} por revisar` : 'todo legalizado'}
+          valueClass={pendingCount > 0 ? 'text-amber-600' : 'text-slate-900'}
+        />
+        <Card
+          label="Rechazado"
+          value={formatMoney(rejectedAmount)}
+          muted={rejectedCount > 0 ? `${rejectedCount} ${rejectedCount === 1 ? 'factura' : 'facturas'} rechazadas` : 'sin rechazos'}
+          valueClass={rejectedCount > 0 ? 'text-rose-600' : 'text-slate-900'}
         />
       </div>
 
