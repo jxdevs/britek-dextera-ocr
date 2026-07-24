@@ -454,10 +454,10 @@ export default function DashboardPage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-red-800">
-                  {data.boxes_by_status.blocked} caja{data.boxes_by_status.blocked !== 1 ? 's' : ''} bloqueada{data.boxes_by_status.blocked !== 1 ? 's' : ''} por vencimiento de plazo
+                  {data.boxes_by_status.blocked} caja{data.boxes_by_status.blocked !== 1 ? 's' : ''} bloqueada{data.boxes_by_status.blocked !== 1 ? 's' : ''}
                 </p>
                 <p className="text-xs text-red-600 mt-0.5">
-                  Superaron el plazo de legalización sin cerrarse. Requieren legalización y cierre por un administrador.
+                  No pueden registrar ni aprobar facturas. Un administrador puede desbloquearlas para reanudar la operación.
                 </p>
               </div>
               <Eye className="size-4 text-red-500" />

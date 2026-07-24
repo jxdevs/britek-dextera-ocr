@@ -46,9 +46,6 @@ export class PettyCashService {
   ) {}
 
   async list() {
-    // Bloqueo lazy: auto-bloquear cajas vencidas al listar
-    await this.blockExpiredBoxes();
-
     return this.boxes.findAll({
       include: [
         {
@@ -65,9 +62,6 @@ export class PettyCashService {
   }
 
   async findOne(id: string) {
-    // Bloqueo lazy para esta caja específica
-    await this.blockExpiredBoxById(id);
-
     const box = await this.boxes.findByPk(id, {
       include: [
         {
@@ -86,8 +80,6 @@ export class PettyCashService {
   // ════════════════════════════════════════════════════════════════════
 
   async listByWorker(workerId: string) {
-    await this.blockExpiredBoxes();
-
     return this.boxes.findAll({
       include: [
         {
@@ -111,8 +103,6 @@ export class PettyCashService {
   }
 
   async findOneByWorker(boxId: string, workerId: string) {
-    await this.blockExpiredBoxById(boxId);
-
     const box = await this.boxes.findByPk(boxId, {
       include: [
         {
@@ -274,6 +264,29 @@ export class PettyCashService {
       entityLabel: `${box.name} - ${box.code}`,
       before: { status: beforeStatus, current_balance: beforeBalance },
       after: { status: 'closed', closed_at: new Date().toISOString() },
+    });
+
+    return this.findOne(id);
+  }
+
+  /** Desbloquea una caja bloqueada, devolviéndola a estado 'open'. Admin only. */
+  async unblock(id: string, user: AuthUser) {
+    const box = await this.boxes.findByPk(id);
+    if (!box) throw new NotFoundException('Caja no encontrada');
+    if (box.status !== 'blocked') {
+      throw new ConflictException('Solo se pueden desbloquear cajas bloqueadas');
+    }
+
+    await box.update({ status: 'open' });
+
+    this.audit.log({
+      user,
+      action: 'update',
+      entity: 'petty_cash_box',
+      entityId: id,
+      entityLabel: `Desbloqueo: ${box.name} - ${box.code}`,
+      before: { status: 'blocked' },
+      after: { status: 'open' },
     });
 
     return this.findOne(id);
@@ -564,8 +577,7 @@ export class PettyCashService {
   /**
    * Regla 1b: un residente solo puede tener una caja abierta. Un admin puede
    * abrir una SEGUNDA caja como excepción incluyendo una justificación
-   * (máximo MAX_OPEN_BOXES_PER_WORKER). Las cajas bloqueadas nunca admiten
-   * excepción: deben legalizarse y cerrarse primero.
+   * (máximo MAX_OPEN_BOXES_PER_WORKER).
    *
    * Retorna true cuando la creación procede gracias a la excepción.
    */
@@ -595,17 +607,6 @@ export class PettyCashService {
     });
 
     if (openBoxes.length === 0) return false;
-
-    // Una caja bloqueada nunca admite excepción: primero se legaliza y cierra
-    const blockedBox = openBoxes.find((b) => b.status === 'blocked');
-    if (blockedBox) {
-      const names = [
-        ...new Set((blockedBox as any).workers.map((w: Worker) => w.name)),
-      ].join(', ');
-      throw new ConflictException(
-        `El residente ${names} tiene una caja bloqueada (${blockedBox.code}) por vencimiento de plazo. Debe legalizarla y cerrarla antes de abrir otra.`,
-      );
-    }
 
     // Conteo de cajas abiertas por residente para aplicar el tope duro
     const countByWorker = new Map<string, { name: string; count: number }>();
@@ -669,31 +670,6 @@ export class PettyCashService {
       throw new ConflictException(
         `La caja cerrada "${boxCode}" tiene facturas pendientes de legalizar. Debe legalizar el 100% antes de abrir una nueva caja.`,
       );
-    }
-  }
-
-  // ── Regla 4b: Bloqueo lazy de cajas vencidas ──
-  private async blockExpiredBoxes() {
-    const now = new Date();
-    const [count] = await this.boxes.update(
-      { status: 'blocked' },
-      {
-        where: {
-          status: 'open',
-          expires_at: { [Op.ne]: null, [Op.lt]: now },
-        },
-      },
-    );
-    if (count > 0) {
-      this.logger.warn(`Auto-bloqueadas ${count} caja(s) por vencimiento de plazo.`);
-    }
-  }
-
-  private async blockExpiredBoxById(id: string) {
-    const box = await this.boxes.findByPk(id);
-    if (box && box.status === 'open' && box.expires_at && new Date(box.expires_at) < new Date()) {
-      await box.update({ status: 'blocked' });
-      this.logger.warn(`Auto-bloqueada caja ${box.code} por vencimiento de plazo.`);
     }
   }
 

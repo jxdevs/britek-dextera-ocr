@@ -153,9 +153,9 @@ export default function MiCajaDetailPage() {
         <div className="flex items-center gap-3 rounded-lg border px-4 py-3 bg-rose-50 border-rose-300 text-rose-800">
           <Lock className="size-5 shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-medium">Caja bloqueada por vencimiento de plazo</p>
+            <p className="text-sm font-medium">Caja bloqueada</p>
             <p className="text-xs mt-0.5 opacity-75">
-              Esta caja superó el plazo de 7 días. No se pueden aprobar facturas hasta que un admin la cierre.
+              No se pueden registrar ni aprobar facturas mientras la caja esté bloqueada. Un administrador debe desbloquearla para reanudar la operación.
             </p>
           </div>
         </div>

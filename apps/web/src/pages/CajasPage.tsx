@@ -11,7 +11,7 @@ export default function CajasPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [workerFilter, setWorkerFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'' | BoxStatus>('');
+  const [statusFilter, setStatusFilter] = useState<'' | BoxStatus>('open');
 
   const load = useCallback(async () => {
     setLoading(true);

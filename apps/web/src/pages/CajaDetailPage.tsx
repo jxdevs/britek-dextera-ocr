@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Check, Clock, Eye, FileSpreadsheet, Loader2, Lock, Settings, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Clock, Eye, FileSpreadsheet, Loader2, Lock, Settings, Trash2, Unlock, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { approvals as approvalsApi, fetchBlobWithAuth, pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
@@ -18,6 +18,7 @@ export default function CajaDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingBox, setEditingBox] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [unblocking, setUnblocking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -52,6 +53,21 @@ export default function CajaDetailPage() {
       alert(err instanceof Error ? err.message : 'Error');
     } finally {
       setClosing(false);
+    }
+  };
+
+  const handleUnblock = async () => {
+    if (!box) return;
+    if (!confirm(`¿Desbloquear la caja ${box.code}? Volverá a estado abierta y podrá registrar y aprobar facturas.`))
+      return;
+    setUnblocking(true);
+    try {
+      await pettyCash.unblock(box.id);
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al desbloquear');
+    } finally {
+      setUnblocking(false);
     }
   };
 
@@ -214,12 +230,12 @@ export default function CajaDetailPage() {
             {box.status === 'blocked' && (
               <button
                 type="button"
-                onClick={handleClose}
-                disabled={closing}
-                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 hover:bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 disabled:opacity-50"
+                onClick={handleUnblock}
+                disabled={unblocking}
+                className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 text-sm font-medium text-emerald-700 disabled:opacity-50"
               >
-                {closing ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
-                Cerrar caja
+                {unblocking ? <Loader2 className="size-4 animate-spin" /> : <Unlock className="size-4" />}
+                Desbloquear
               </button>
             )}
             <button
@@ -301,11 +317,22 @@ export default function CajaDetailPage() {
         <div className="flex items-center gap-3 rounded-lg border px-4 py-3 bg-rose-50 border-rose-300 text-rose-800">
           <Lock className="size-5 shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-medium">Caja bloqueada por vencimiento de plazo</p>
+            <p className="text-sm font-medium">Caja bloqueada</p>
             <p className="text-xs mt-0.5 opacity-75">
-              Esta caja superó el plazo de 7 días. No se pueden aprobar facturas hasta que un admin la cierre.
+              No se pueden registrar ni aprobar facturas mientras la caja esté bloqueada. Un administrador puede desbloquearla para reanudar la operación.
             </p>
           </div>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleUnblock}
+              disabled={unblocking}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 text-sm font-medium text-emerald-700 disabled:opacity-50 shrink-0"
+            >
+              {unblocking ? <Loader2 className="size-4 animate-spin" /> : <Unlock className="size-4" />}
+              Desbloquear
+            </button>
+          )}
         </div>
       )}
 

@@ -243,6 +243,11 @@ export const pettyCash = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  unblock: (id: string) =>
+    request<PettyCashBox>(`/petty-cash/${id}/unblock`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
   assign: (id: string, worker_ids: string[], primary_worker_id?: string) =>
     request<PettyCashBox>(`/petty-cash/${id}/assign`, {
       method: 'POST',

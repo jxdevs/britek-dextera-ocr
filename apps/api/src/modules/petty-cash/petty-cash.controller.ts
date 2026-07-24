@@ -94,6 +94,15 @@ export class PettyCashController {
     return this.service.close(id, user);
   }
 
+  @Post(':id/unblock')
+  @Roles('admin')
+  unblock(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.unblock(id, user);
+  }
+
   @Post(':id/assign')
   @Roles('admin')
   assign(
