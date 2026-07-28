@@ -81,6 +81,7 @@ export class LegalizationExportService {
       attributes: [
         'id', 'vendor_nit', 'vendor_name', 'invoice_number', 'invoice_date',
         'subtotal', 'iva', 'total', 'expense_category', 'submitted_at',
+        'document_type',
       ],
       order: [['invoice_date', 'ASC'], ['submitted_at', 'ASC']],
     });
@@ -183,7 +184,13 @@ export class LegalizationExportService {
         row.getCell(2).value = inv.vendor_nit ?? '';
         row.getCell(3).value = inv.vendor_name ?? '';
         const category = inv.expense_category ? CATEGORY_LABELS[inv.expense_category] ?? inv.expense_category : 'Gasto';
-        row.getCell(4).value = inv.invoice_number ? `${category} - Factura ${inv.invoice_number}` : category;
+        // Una cuenta de cobro no tiene número de factura: se nombra por lo que es.
+        row.getCell(4).value =
+          inv.document_type === 'cuenta_cobro'
+            ? `${category} - Cuenta de cobro`
+            : inv.invoice_number
+              ? `${category} - Factura ${inv.invoice_number}`
+              : category;
         row.getCell(5).value = valor;
         row.getCell(6).value = iva;
         row.getCell(7).value = total;

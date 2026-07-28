@@ -13,6 +13,16 @@ import { Approval } from './approval.model';
 
 export type InvoiceStatus = 'pending' | 'observed' | 'approved' | 'rejected';
 
+/**
+ * Tipo de soporte de gasto. Ambos descuentan de la caja y se legalizan; cambian
+ * las reglas de validación (una cuenta de cobro no lleva IVA ni CUFE y se
+ * identifica con la cédula del prestador).
+ *
+ * Los documentos que NO son gasto (RUT, cédula, cámara de comercio) no entran
+ * aquí: viven en la tabla `box_documents`.
+ */
+export type DocumentType = 'factura' | 'cuenta_cobro';
+
 export type ExpenseCategory =
   | 'combustible'
   | 'transporte'
@@ -23,7 +33,20 @@ export type ExpenseCategory =
   | 'alimentacion'
   | 'otro';
 
-@Table({ tableName: 'invoices', timestamps: true, underscored: true })
+/**
+ * `paranoid: true` — las facturas nunca se borran de la base. El botón de la UI
+ * las envía a la papelera (marca `deleted_at`) y Sequelize las excluye de todas
+ * las consultas normales. Se pueden restaurar durante la ventana de retención
+ * (`TRASH_RETENTION_DAYS` en invoices.service); después solo dejan de listarse,
+ * pero la fila sigue ahí.
+ */
+@Table({
+  tableName: 'invoices',
+  timestamps: true,
+  underscored: true,
+  paranoid: true,
+  deletedAt: 'deleted_at',
+})
 export class Invoice extends Model {
   @Column({ type: DataType.UUID, primaryKey: true, defaultValue: DataType.UUIDV4 })
   declare id: string;
@@ -38,6 +61,13 @@ export class Invoice extends Model {
 
   @Column({ type: DataType.STRING, allowNull: false })
   declare image_url: string;
+
+  @Column({
+    type: DataType.ENUM('factura', 'cuenta_cobro'),
+    allowNull: false,
+    defaultValue: 'factura',
+  })
+  declare document_type: DocumentType;
 
   @Column({
     type: DataType.ENUM('pending', 'observed', 'approved', 'rejected'),
@@ -57,6 +87,10 @@ export class Invoice extends Model {
 
   @Column({ type: DataType.DATEONLY, allowNull: true })
   declare invoice_date: string | null;
+
+  /** CUFE/CUDE de factura electrónica DIAN (96 hex). Null en tirillas POS y recibos manuales. */
+  @Column({ type: DataType.STRING(100), allowNull: true })
+  declare cufe: string | null;
 
   @Column({ type: DataType.DECIMAL(14, 2), allowNull: true })
   declare subtotal: string | null;
@@ -93,6 +127,18 @@ export class Invoice extends Model {
 
   @Column({ type: DataType.DATE, allowNull: false, defaultValue: DataType.NOW })
   declare submitted_at: Date;
+
+  /** Momento en que se envió a la papelera. null = activa. Lo gestiona Sequelize. */
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare deleted_at: Date | null;
+
+  /**
+   * Quién la envió a la papelera. Sin @ForeignKey a propósito: una segunda
+   * asociación a Worker volvería ambiguos los `include: [{ model: Worker }]`
+   * que ya usan worker_id.
+   */
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare deleted_by: string | null;
 
   @BelongsTo(() => Worker, 'worker_id')
   declare worker: Worker;

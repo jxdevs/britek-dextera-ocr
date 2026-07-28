@@ -224,7 +224,13 @@ export class WhatsappService {
       path: '',
     } as unknown as Express.Multer.File;
 
-    const invoice = await this.invoicesService.createFromUpload(file, worker.id);
+    // Sin routeSupportDocuments: por WhatsApp todo lo que llega se procesa como
+    // gasto (factura o cuenta de cobro). Los anexos se adjuntan desde el panel.
+    const result = await this.invoicesService.createFromUpload(file, worker.id);
+    if (result.kind !== 'invoice') {
+      throw new Error('Se esperaba una factura desde el flujo de WhatsApp');
+    }
+    const invoice = result.invoice;
 
     // ── Verification: confirm invoice exists in DB ──
     const verified = await this.invoices.findByPk(invoice.id);

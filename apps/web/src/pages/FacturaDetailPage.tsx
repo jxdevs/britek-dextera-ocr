@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Check, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, ExternalLink, Loader2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AuthFilePreview } from '../components/AuthFilePreview';
@@ -6,11 +6,13 @@ import {
   ApiError,
   approvals as approvalsApi,
   invoices as invoicesApi,
+  DOCUMENT_TYPE_LABEL,
+  type DocumentType,
   type EligibleBox,
   type Invoice,
   type InvoiceStatus,
 } from '../lib/api';
-import { cn, formatMoney } from '../lib/utils';
+import { cn, dianValidationUrl, formatMoney, isValidCufeFormat } from '../lib/utils';
 
 /** Format a raw numeric string as Colombian integer (no decimals, dots for thousands) */
 function formatCOP(value: string): string {
@@ -40,10 +42,12 @@ const STATUS_TONE: Record<InvoiceStatus, string> = {
 };
 
 interface EditableForm {
+  document_type: DocumentType;
   vendor_nit: string;
   vendor_name: string;
   invoice_number: string;
   invoice_date: string;
+  cufe: string;
   subtotal: string;
   iva: string;
   total: string;
@@ -52,10 +56,12 @@ interface EditableForm {
 
 function toForm(inv: Invoice): EditableForm {
   return {
+    document_type: inv.document_type,
     vendor_nit: inv.vendor_nit ?? '',
     vendor_name: inv.vendor_name ?? '',
     invoice_number: inv.invoice_number ?? '',
     invoice_date: inv.invoice_date ?? '',
+    cufe: inv.cufe ?? '',
     subtotal: inv.subtotal ?? '',
     iva: inv.iva ?? '',
     total: inv.total ?? '',
@@ -150,7 +156,7 @@ export default function FacturaDetailPage() {
   const willOverdraw = projection !== null && projection.balance < 0 && projection.delta < 0;
   const needsJustification = willOverdraw && !comments.trim();
 
-  const update = <K extends keyof EditableForm>(key: K, value: string) =>
+  const update = <K extends keyof EditableForm>(key: K, value: EditableForm[K]) =>
     setForm((curr) => (curr ? { ...curr, [key]: value } : curr));
 
   const decide = async (action: 'approve' | 'reject') => {
@@ -200,6 +206,9 @@ export default function FacturaDetailPage() {
 
   const readOnly = invoice.status !== 'pending' && invoice.status !== 'observed';
   const confidence = invoice.confidence_score ?? null;
+  // Se lee del formulario, no de la factura guardada, para que las etiquetas
+  // cambien en el momento en que el aprobador corrige una clasificación errada.
+  const isCuentaCobro = form.document_type === 'cuenta_cobro';
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
@@ -242,18 +251,74 @@ export default function FacturaDetailPage() {
 
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900">Datos extraídos</h3>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-slate-900">Datos extraídos</h3>
+                {/* La IA clasifica, pero puede errar: el aprobador corrige contra la imagen. */}
+                {readOnly ? (
+                  <span
+                    className={cn(
+                      'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium',
+                      isCuentaCobro
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'bg-slate-100 text-slate-600',
+                    )}
+                  >
+                    {DOCUMENT_TYPE_LABEL[form.document_type]}
+                  </span>
+                ) : (
+                  <select
+                    value={form.document_type}
+                    onChange={(e) => update('document_type', e.target.value as DocumentType)}
+                    title="Tipo de documento — corrígelo si la IA lo clasificó mal"
+                    className={cn(
+                      'rounded border px-1.5 py-0.5 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900',
+                      isCuentaCobro
+                        ? 'border-indigo-200 bg-indigo-50 text-indigo-800'
+                        : 'border-slate-300 bg-white text-slate-700',
+                    )}
+                  >
+                    <option value="factura">{DOCUMENT_TYPE_LABEL.factura}</option>
+                    <option value="cuenta_cobro">{DOCUMENT_TYPE_LABEL.cuenta_cobro}</option>
+                  </select>
+                )}
+              </div>
               {confidence !== null && (
                 <ConfidenceBadge score={confidence} />
               )}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Proveedor" value={form.vendor_name} onChange={(v) => update('vendor_name', v)} readOnly={readOnly} />
-              <Field label="NIT" value={form.vendor_nit} onChange={(v) => update('vendor_nit', v)} readOnly={readOnly} />
+              <Field
+                label={isCuentaCobro ? 'Quien cobra' : 'Proveedor'}
+                value={form.vendor_name}
+                onChange={(v) => update('vendor_name', v)}
+                readOnly={readOnly}
+              />
+              <Field
+                label={isCuentaCobro ? 'Cédula' : 'NIT'}
+                value={form.vendor_nit}
+                onChange={(v) => update('vendor_nit', v)}
+                readOnly={readOnly}
+              />
               <Field label="Número" value={form.invoice_number} onChange={(v) => update('invoice_number', v)} readOnly={readOnly} />
               <Field label="Fecha" type="date" value={form.invoice_date} onChange={(v) => update('invoice_date', v)} readOnly={readOnly} />
             </div>
+
+            {/* Una cuenta de cobro no lleva CUFE, así que el bloque se oculta. Pero si
+                aun así trae uno, se muestra: es la prueba de que la clasificación falló. */}
+            {(!isCuentaCobro || form.cufe.trim() !== '') && (
+              <>
+                {isCuentaCobro && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Este documento está clasificado como cuenta de cobro pero trae un CUFE.
+                    Las cuentas de cobro no son documentos electrónicos: probablemente sea una
+                    factura y convenga corregir el tipo arriba.
+                  </div>
+                )}
+                <CufeField value={form.cufe} onChange={(v) => update('cufe', v)} readOnly={readOnly} />
+              </>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-slate-600">Subtotal</span>
@@ -494,6 +559,81 @@ function Field({
         )}
       />
     </label>
+  );
+}
+
+/**
+ * CUFE/CUDE de factura electrónica. Se muestra siempre —también vacío— porque
+ * "esta factura no es electrónica" es información relevante para el aprobador,
+ * no una ausencia de dato. Cuando el código tiene el formato válido (96 hex) se
+ * ofrece el enlace al portal de la DIAN para verificarlo.
+ */
+function CufeField({
+  value,
+  onChange,
+  readOnly,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  readOnly: boolean;
+}) {
+  const trimmed = value.trim();
+  const valid = isValidCufeFormat(trimmed);
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2.5 space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-slate-600">CUFE / CUDE (factura electrónica)</span>
+        {trimmed && (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium ring-1 ring-inset',
+              valid
+                ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                : 'bg-amber-50 text-amber-800 ring-amber-200',
+            )}
+          >
+            {valid ? 'Formato válido' : `Formato dudoso — ${trimmed.length}/96`}
+          </span>
+        )}
+      </div>
+
+      <input
+        type="text"
+        value={value}
+        readOnly={readOnly}
+        spellCheck={false}
+        placeholder="Sin CUFE — el soporte no es una factura electrónica"
+        onChange={(e) => onChange(e.target.value.trim().toLowerCase())}
+        className={cn(
+          'w-full rounded-md border border-slate-300 px-3 py-1.5 font-mono text-[11px] leading-relaxed tracking-tight text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900',
+          readOnly && 'bg-slate-50 text-slate-700',
+        )}
+      />
+
+      {trimmed ? (
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <a
+            href={dianValidationUrl(trimmed)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-medium text-slate-700 hover:text-slate-900 underline underline-offset-2"
+          >
+            Validar en la DIAN <ExternalLink className="size-3" />
+          </a>
+          {!valid && (
+            <span className="text-amber-700">
+              Verifica el código contra la imagen antes de validar
+            </span>
+          )}
+        </div>
+      ) : (
+        <p className="text-[11px] text-slate-500">
+          Las tirillas POS y los recibos manuales no traen CUFE. Si la factura sí lo tiene, cópialo
+          desde la imagen para poder validarla ante la DIAN.
+        </p>
+      )}
+    </div>
   );
 }
 

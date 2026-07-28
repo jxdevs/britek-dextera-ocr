@@ -6,6 +6,7 @@ import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { BoxDocumentsModule } from './modules/box-documents/box-documents.module';
 import { ExtractionModule } from './modules/extraction/extraction.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { PettyCashModule } from './modules/petty-cash/petty-cash.module';
@@ -25,6 +26,7 @@ import { WorkersModule } from './modules/workers/workers.module';
     AuthModule,
     WorkersModule,
     PettyCashModule,
+    BoxDocumentsModule,
     InvoicesModule,
     ApprovalsModule,
     WhatsappModule,

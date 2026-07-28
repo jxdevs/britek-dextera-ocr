@@ -7,6 +7,7 @@ export type AuditAction =
   | 'create'
   | 'update'
   | 'delete'
+  | 'restore'
   | 'close'
   | 'approve'
   | 'reject';
@@ -29,7 +30,7 @@ export class AuditLog extends Model {
   @Column({
     type: DataType.ENUM(
       'login_success', 'login_failed',
-      'create', 'update', 'delete',
+      'create', 'update', 'delete', 'restore',
       'close', 'approve', 'reject',
     ),
     allowNull: false,

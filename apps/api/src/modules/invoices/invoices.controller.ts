@@ -40,6 +40,13 @@ export class InvoicesController {
     return this.service.list(query);
   }
 
+  /** Va antes de `@Get(':id')`: si no, 'trash' entraría al ParseUUIDPipe y daría 400. */
+  @Get('trash')
+  @Roles('admin')
+  listTrash() {
+    return this.service.listTrash();
+  }
+
   @Get(':id')
   @Roles('admin', 'approver')
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
@@ -64,24 +71,46 @@ export class InvoicesController {
   @Post()
   @Roles('admin', 'approver')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_BYTES } }))
+  /**
+   * Devuelve `{ kind: 'invoice' | 'document' }`: si la IA determina que el
+   * archivo no es un gasto (RUT, cédula, cámara de comercio) se archiva como
+   * anexo de la caja en vez de crear una factura.
+   */
   async create(
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() dto: CreateInvoiceDto,
+    @CurrentUser() user: AuthUser,
   ) {
     if (!file) {
       throw new BadRequestException(
         'Falta el archivo. Envía multipart/form-data con campo "file" y worker_id.',
       );
     }
-    return this.service.createFromUpload(file, dto.worker_id);
+    return this.service.createFromUpload(file, dto.worker_id, {
+      routeSupportDocuments: true,
+      uploadedBy: user.id,
+    });
   }
 
-  @Delete(':id')
+  @Post(':id/restore')
   @Roles('admin')
-  remove(
+  restore(
     @Param('id', new ParseUUIDPipe()) id: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.service.remove(id, user);
+    return this.service.restore(id, user);
+  }
+
+  /**
+   * No borra la factura: la envía a la papelera. Se mantiene el verbo DELETE
+   * porque para el cliente el recurso desaparece de las vistas normales.
+   */
+  @Delete(':id')
+  @Roles('admin')
+  moveToTrash(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.moveToTrash(id, user);
   }
 }

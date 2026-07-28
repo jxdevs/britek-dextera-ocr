@@ -200,6 +200,8 @@ export interface Movement {
   vendor_nit: string | null;
   invoice_number: string | null;
   invoice_date: string | null;
+  cufe: string | null;
+  document_type: DocumentType;
   total: string;
   status: InvoiceStatus;
   submitted_at: string;
@@ -301,11 +303,15 @@ export interface Invoice {
   worker_id: string;
   box_id: string | null;
   image_url: string;
+  /** factura | cuenta_cobro. Los soportes que no son gasto viven en BoxDocument. */
+  document_type: DocumentType;
   status: InvoiceStatus;
   vendor_nit: string | null;
   vendor_name: string | null;
   invoice_number: string | null;
   invoice_date: string | null;
+  /** CUFE/CUDE de factura electrónica DIAN. null si el soporte no es electrónico. */
+  cufe: string | null;
   subtotal: string | null;
   iva: string | null;
   total: string;
@@ -316,12 +322,96 @@ export interface Invoice {
   requires_special_approval: boolean;
   reported_late: boolean;
   submitted_at: string;
+  /** Fecha de envío a la papelera. null = activa. La fila nunca se borra. */
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
   worker?: InvoiceWorker;
   box?: InvoiceBox | null;
   approvals?: InvoiceApproval[];
 }
+
+/** Factura en la papelera, con la ventana de restauración ya calculada. */
+export interface TrashedInvoice extends Invoice {
+  /** Fecha a partir de la cual deja de listarse en la papelera. */
+  restorable_until: string;
+  /** Días que faltan para eso. 0 = último día. */
+  days_left: number;
+}
+
+/**
+ * Resultado de subir un archivo a la cola de facturas: según lo que la IA vea,
+ * termina como movimiento de caja o archivado como anexo.
+ */
+export type UploadResult =
+  | { kind: 'invoice'; invoice: Invoice }
+  | { kind: 'document'; document: BoxDocument };
+
+/** Soporte de gasto. Ambos descuentan de la caja y se legalizan. */
+export type DocumentType = 'factura' | 'cuenta_cobro';
+
+export const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
+  factura: 'Factura',
+  cuenta_cobro: 'Cuenta de cobro',
+};
+
+// ============ Anexos de caja (no son gasto) ============
+
+export type BoxDocumentType =
+  | 'rut'
+  | 'cedula'
+  | 'camara_comercio'
+  | 'certificacion_bancaria'
+  | 'otro';
+
+export const BOX_DOCUMENT_TYPE_LABEL: Record<BoxDocumentType, string> = {
+  rut: 'RUT',
+  cedula: 'Cédula',
+  camara_comercio: 'Cámara de comercio',
+  certificacion_bancaria: 'Certificación bancaria',
+  otro: 'Otro',
+};
+
+export interface BoxDocument {
+  id: string;
+  box_id: string | null;
+  worker_id: string | null;
+  doc_type: BoxDocumentType;
+  description: string | null;
+  file_url: string;
+  original_name: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  /** manual = adjuntado desde la caja; auto = reclasificado por la IA al subirlo. */
+  source: 'manual' | 'auto';
+  created_at: string;
+  worker?: { id: string; name: string } | null;
+  box?: { id: string; code: string; name: string } | null;
+}
+
+export const boxDocuments = {
+  listByBox: (boxId: string) => request<BoxDocument[]>(`/box-documents/box/${boxId}`),
+  listUnassigned: () => request<BoxDocument[]>('/box-documents/unassigned'),
+  create: (
+    boxId: string,
+    file: File,
+    input: { doc_type?: BoxDocumentType; description?: string; worker_id?: string } = {},
+  ) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (input.doc_type) form.append('doc_type', input.doc_type);
+    if (input.description) form.append('description', input.description);
+    if (input.worker_id) form.append('worker_id', input.worker_id);
+    return request<BoxDocument>(`/box-documents/box/${boxId}`, { method: 'POST', body: form });
+  },
+  assign: (id: string, boxId: string) =>
+    request<BoxDocument>(`/box-documents/${id}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ box_id: boxId }),
+    }),
+  remove: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/box-documents/${id}`, { method: 'DELETE' }),
+};
 
 export interface EligibleBox {
   id: string;
@@ -343,15 +433,32 @@ export const invoices = {
   },
   get: (id: string) => request<Invoice>(`/invoices/${id}`),
   eligibleBoxes: (id: string) => request<EligibleBox[]>(`/invoices/${id}/boxes`),
+  /**
+   * Sube un documento a la cola. La IA decide qué es: si no es un gasto (RUT,
+   * cédula, cámara de comercio) no se crea factura, se archiva como anexo de la
+   * caja y la respuesta llega con kind = 'document'.
+   */
   create: async (file: File, worker_id: string) => {
     const form = new FormData();
     form.append('file', file);
     form.append('worker_id', worker_id);
-    return request<Invoice>('/invoices', { method: 'POST', body: form });
+    return request<UploadResult>('/invoices', { method: 'POST', body: form });
   },
-  remove: (id: string) =>
-    request<{ id: string; deleted: boolean }>(`/invoices/${id}`, { method: 'DELETE' }),
+  /**
+   * Envía una factura rechazada a la papelera. No la borra: deja de aparecer en
+   * las vistas y queda restaurable durante {@link TRASH_RETENTION_DAYS} días.
+   */
+  moveToTrash: (id: string) =>
+    request<{ id: string; trashed: boolean; deleted_at: string; restorable_until: string }>(
+      `/invoices/${id}`,
+      { method: 'DELETE' },
+    ),
+  trash: () => request<TrashedInvoice[]>('/invoices/trash'),
+  restore: (id: string) => request<Invoice>(`/invoices/${id}/restore`, { method: 'POST' }),
 };
+
+/** Debe coincidir con TRASH_RETENTION_DAYS del backend. */
+export const TRASH_RETENTION_DAYS = 30;
 
 // ============ Approvals ============
 
@@ -403,6 +510,7 @@ export interface ExtractedInvoice {
   vendor_name: string;
   invoice_number?: string | null;
   invoice_date?: string | null;
+  cufe?: string | null;
   subtotal?: number | null;
   iva?: number | null;
   total: number;
@@ -556,6 +664,7 @@ export type AuditAction =
   | 'create'
   | 'update'
   | 'delete'
+  | 'restore'
   | 'close'
   | 'approve'
   | 'reject';

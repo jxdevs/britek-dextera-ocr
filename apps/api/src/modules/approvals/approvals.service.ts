@@ -16,14 +16,18 @@ import {
 } from '../../database/models';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
 import { AuditService } from '../audit/audit.service';
+import type { DocumentType } from '../../database/models/invoice.model';
+import { normalizeCufe } from '../invoices/cufe';
 import { InvoicesService } from '../invoices/invoices.service';
 import { DecideDto } from './dto/decide.dto';
 
 const EDITABLE_FIELDS = [
+  'document_type',
   'vendor_nit',
   'vendor_name',
   'invoice_number',
   'invoice_date',
+  'cufe',
   'subtotal',
   'iva',
   'total',
@@ -33,6 +37,9 @@ const EDITABLE_FIELDS = [
 
 type EditableField = (typeof EDITABLE_FIELDS)[number];
 const DECIMAL_FIELDS = new Set<EditableField>(['subtotal', 'iva', 'total']);
+
+/** La IA puede equivocarse clasificando; el aprobador corrige contra la imagen. */
+const VALID_DOCUMENT_TYPES: DocumentType[] = ['factura', 'cuenta_cobro'];
 
 @Injectable()
 export class ApprovalsService {
@@ -256,6 +263,9 @@ export class ApprovalsService {
       if (!(key in input)) continue;
       const value = input[key];
       if (value === null || value === undefined || value === '') {
+        // document_type es NOT NULL en la base: vaciarlo no es "borrar el dato",
+        // es enviar basura. Se ignora y la factura conserva el tipo que traía.
+        if (key === 'document_type') continue;
         out[key] = null;
         continue;
       }
@@ -265,6 +275,15 @@ export class ApprovalsService {
           throw new BadRequestException(`Valor inválido para ${key}`);
         }
         out[key] = n.toFixed(2);
+      } else if (key === 'cufe') {
+        out[key] = normalizeCufe(value);
+      } else if (key === 'document_type') {
+        if (!VALID_DOCUMENT_TYPES.includes(value as DocumentType)) {
+          throw new BadRequestException(
+            `Tipo de documento inválido. Debe ser uno de: ${VALID_DOCUMENT_TYPES.join(', ')}.`,
+          );
+        }
+        out[key] = value;
       } else {
         out[key] = String(value);
       }

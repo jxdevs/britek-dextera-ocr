@@ -1,17 +1,31 @@
-import { Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { Loader2, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthImage } from '../components/AuthImage';
 import { InvoiceUploadModal } from '../components/InvoiceUploadModal';
-import { invoices as invoicesApi, workers as workersApi, type Invoice, type InvoiceStatus, type ExpenseCategory, type Worker } from '../lib/api';
+import {
+  invoices as invoicesApi,
+  workers as workersApi,
+  DOCUMENT_TYPE_LABEL,
+  TRASH_RETENTION_DAYS,
+  type ExpenseCategory,
+  type Invoice,
+  type InvoiceStatus,
+  type TrashedInvoice,
+  type Worker,
+} from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cn, formatMoney } from '../lib/utils';
 
-const TABS: { value: InvoiceStatus; label: string }[] = [
+/** La papelera no es un estado de factura: es una vista aparte del mismo listado. */
+type TabValue = InvoiceStatus | 'trash';
+
+const TABS: { value: TabValue; label: string; adminOnly?: boolean }[] = [
   { value: 'pending', label: 'Pendientes' },
   { value: 'observed', label: 'Observadas' },
   { value: 'approved', label: 'Aprobadas' },
   { value: 'rejected', label: 'Rechazadas' },
+  { value: 'trash', label: 'Papelera', adminOnly: true },
 ];
 
 const STATUS_TONE: Record<InvoiceStatus, string> = {
@@ -50,27 +64,30 @@ const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
 export default function FacturasPendingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [status, setStatus] = useState<InvoiceStatus>('pending');
+  const isAdmin = user?.role === 'admin';
+  const [tab, setTab] = useState<TabValue>('pending');
   const [items, setItems] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [workerFilter, setWorkerFilter] = useState('');
   const [workersList, setWorkersList] = useState<Worker[]>([]);
 
+  const isTrash = tab === 'trash';
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setItems(await invoicesApi.list({ status }));
+      setItems(tab === 'trash' ? await invoicesApi.trash() : await invoicesApi.list({ status: tab }));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [tab]);
 
   useEffect(() => {
     load();
@@ -113,21 +130,30 @@ export default function FacturasPendingPage() {
       </div>
 
       <div className="border-b border-slate-200 flex gap-4">
-        {TABS.map((t) => (
+        {TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => (
           <button
             key={t.value}
-            onClick={() => setStatus(t.value)}
+            onClick={() => setTab(t.value)}
             className={cn(
-              'px-1 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-              status === t.value
+              'px-1 py-2 text-sm font-medium border-b-2 -mb-px transition-colors inline-flex items-center gap-1.5',
+              tab === t.value
                 ? 'border-slate-900 text-slate-900'
                 : 'border-transparent text-slate-500 hover:text-slate-900',
             )}
           >
+            {t.value === 'trash' && <Trash2 className="size-3.5" />}
             {t.label}
           </button>
         ))}
       </div>
+
+      {isTrash && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-600">
+          Las facturas enviadas aquí se pueden restaurar durante {TRASH_RETENTION_DAYS} días.
+          Después dejan de aparecer en esta lista, pero{' '}
+          <span className="font-medium text-slate-800">no se borran de la base de datos</span>.
+        </div>
+      )}
 
       {/* Buscador y filtro por residente */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -186,11 +212,13 @@ export default function FacturasPendingPage() {
         </div>
       ) : items.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-lg py-12 text-center text-sm text-slate-500">
-          {status === 'pending'
+          {tab === 'pending'
             ? 'No hay facturas pendientes. Carga una manualmente para probar el flujo.'
-            : status === 'observed'
+            : tab === 'observed'
               ? 'No hay facturas observadas (requiriendo aprobación de admin).'
-              : 'Sin facturas en este estado.'}
+              : tab === 'trash'
+                ? 'La papelera está vacía.'
+                : 'Sin facturas en este estado.'}
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-lg py-12 text-center text-sm text-slate-500">
@@ -198,40 +226,10 @@ export default function FacturasPendingPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredItems.map((inv) => (
-            <div key={inv.id} className="bg-white border border-slate-200 rounded-lg overflow-hidden hover:shadow-sm hover:border-slate-300 transition-all flex flex-col relative">
-              {status === 'rejected' && user?.role === 'admin' && (
-                <button
-                  type="button"
-                  disabled={deleting === inv.id}
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (!confirm('¿Eliminar esta factura rechazada? Esta acción no se puede deshacer.')) return;
-                    setDeleting(inv.id);
-                    try {
-                      await invoicesApi.remove(inv.id);
-                      setItems((prev) => prev.filter((i) => i.id !== inv.id));
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : 'Error al eliminar');
-                    } finally {
-                      setDeleting(null);
-                    }
-                  }}
-                  className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-white/90 backdrop-blur-sm border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 transition-colors shadow-sm"
-                  title="Eliminar factura"
-                >
-                  {deleting === inv.id ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-4" />
-                  )}
-                </button>
-              )}
-              <Link
-                to={`/facturas/${inv.id}`}
-                className="flex flex-col flex-1">
-
+          {filteredItems.map((inv) => {
+            const trashed = isTrash ? (inv as TrashedInvoice) : null;
+            const card = (
+              <>
               <AuthImage
                 path={`/invoices/${inv.id}/image`}
                 alt={inv.vendor_name ?? 'Factura'}
@@ -239,9 +237,16 @@ export default function FacturasPendingPage() {
               />
               <div className="p-3 space-y-2 flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-900 truncate">
-                    {inv.vendor_name ?? 'Proveedor desconocido'}
-                  </p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">
+                      {inv.vendor_name ?? 'Proveedor desconocido'}
+                    </p>
+                    {inv.document_type === 'cuenta_cobro' && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 mt-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">
+                        {DOCUMENT_TYPE_LABEL.cuenta_cobro}
+                      </span>
+                    )}
+                  </div>
                   <span
                     className={cn(
                       'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ring-1 ring-inset shrink-0',
@@ -290,9 +295,110 @@ export default function FacturasPendingPage() {
                   </div>
                 </div>
               </div>
-              </Link>
-            </div>
-          ))}
+              </>
+            );
+
+            return (
+              <div
+                key={inv.id}
+                className={cn(
+                  'bg-white border border-slate-200 rounded-lg overflow-hidden transition-all flex flex-col relative',
+                  trashed ? 'border-dashed' : 'hover:shadow-sm hover:border-slate-300',
+                )}
+              >
+                {/* Rechazadas: enviar a la papelera (no borra, se puede restaurar) */}
+                {tab === 'rejected' && isAdmin && (
+                  <button
+                    type="button"
+                    disabled={busy === inv.id}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (
+                        !confirm(
+                          `¿Enviar esta factura a la papelera? Podrás restaurarla durante ${TRASH_RETENTION_DAYS} días desde la pestaña Papelera.`,
+                        )
+                      )
+                        return;
+                      setBusy(inv.id);
+                      try {
+                        await invoicesApi.moveToTrash(inv.id);
+                        setItems((prev) => prev.filter((i) => i.id !== inv.id));
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Error al enviar a la papelera');
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-white/90 backdrop-blur-sm border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-400 hover:bg-slate-50 transition-colors shadow-sm"
+                    title="Enviar a la papelera"
+                  >
+                    {busy === inv.id ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                  </button>
+                )}
+
+                {/* En la papelera la tarjeta no navega: el detalle ya no responde. */}
+                {trashed ? (
+                  <div className="flex flex-col flex-1 opacity-75">{card}</div>
+                ) : (
+                  <Link to={`/facturas/${inv.id}`} className="flex flex-col flex-1">
+                    {card}
+                  </Link>
+                )}
+
+                {trashed && (
+                  <div className="border-t border-slate-200 bg-slate-50 px-3 py-2 flex items-center justify-between gap-2">
+                    <div className="text-[11px] text-slate-500 leading-tight">
+                      <div>
+                        En la papelera desde el{' '}
+                        {new Date(trashed.deleted_at!).toLocaleDateString('es-CO', {
+                          day: '2-digit',
+                          month: 'short',
+                        })}
+                      </div>
+                      <div
+                        className={cn(
+                          'font-medium',
+                          trashed.days_left <= 3 ? 'text-rose-600' : 'text-slate-600',
+                        )}
+                      >
+                        {trashed.days_left === 0
+                          ? 'Último día para restaurarla'
+                          : `Quedan ${trashed.days_left} día${trashed.days_left === 1 ? '' : 's'}`}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy === inv.id}
+                      onClick={async () => {
+                        setBusy(inv.id);
+                        try {
+                          await invoicesApi.restore(inv.id);
+                          setItems((prev) => prev.filter((i) => i.id !== inv.id));
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : 'Error al restaurar');
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 shrink-0"
+                    >
+                      {busy === inv.id ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="size-3.5" />
+                      )}
+                      Restaurar
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

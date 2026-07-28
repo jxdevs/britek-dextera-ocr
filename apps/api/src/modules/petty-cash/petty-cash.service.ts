@@ -131,8 +131,8 @@ export class PettyCashService {
     return this.invoices.findAll({
       where: { box_id: boxId },
       attributes: [
-        'id', 'vendor_name', 'vendor_nit', 'invoice_number', 'invoice_date',
-        'total', 'status', 'submitted_at', 'expense_category',
+        'id', 'vendor_name', 'vendor_nit', 'invoice_number', 'invoice_date', 'cufe',
+        'document_type', 'total', 'status', 'submitted_at', 'expense_category',
         'requires_special_approval', 'reported_late',
       ],
       include: [
@@ -415,8 +415,8 @@ export class PettyCashService {
     return this.invoices.findAll({
       where: { box_id: id },
       attributes: [
-        'id', 'vendor_name', 'vendor_nit', 'invoice_number', 'invoice_date',
-        'total', 'status', 'submitted_at', 'expense_category',
+        'id', 'vendor_name', 'vendor_nit', 'invoice_number', 'invoice_date', 'cufe',
+        'document_type', 'total', 'status', 'submitted_at', 'expense_category',
         'requires_special_approval', 'reported_late',
       ],
       include: [
@@ -458,13 +458,13 @@ export class PettyCashService {
       const restoredBalance = (currentBalance + invoiceTotal).toFixed(2);
       await box.update({ current_balance: restoredBalance }, { transaction: t });
 
-      // 2. Delete approvals linked to this invoice
-      await this.approvals.destroy({
-        where: { invoice_id: invoiceId },
-        transaction: t,
-      });
-
-      // 3. Delete the invoice
+      // 2. Archivar la factura. El modelo es paranoid: no se borra la fila,
+      //    solo se marca deleted_at y deja de aparecer en las vistas. NO entra
+      //    a la papelera —esa es solo para rechazadas— porque devolverla a la
+      //    caja descuadraría el saldo que acabamos de reajustar.
+      //    Las aprobaciones se conservan (antes se borraban por la FK del
+      //    borrado físico) para no perder el historial de la decisión.
+      await invoice.update({ deleted_by: user.id }, { transaction: t });
       await invoice.destroy({ transaction: t });
 
       // 4. Audit log
@@ -473,7 +473,7 @@ export class PettyCashService {
         action: 'delete',
         entity: 'invoice',
         entityId: invoiceId,
-        entityLabel: `Factura eliminada: ${invoice.vendor_name ?? 'Sin proveedor'} - $${invoiceTotal.toFixed(2)}`,
+        entityLabel: `Factura sacada de la caja y archivada: ${invoice.vendor_name ?? 'Sin proveedor'} - $${invoiceTotal.toFixed(2)}`,
         before: {
           status: invoice.status,
           box_id: boxId,

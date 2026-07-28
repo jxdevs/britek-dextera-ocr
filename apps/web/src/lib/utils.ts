@@ -18,6 +18,29 @@ export function formatNumber(value: number | null | undefined, digits = 0) {
   return new Intl.NumberFormat('es-CO', { maximumFractionDigits: digits }).format(value);
 }
 
+// ============ CUFE / CUDE (facturación electrónica DIAN) ============
+
+/** CUFE y CUDE son un SHA-384 en hexadecimal: 96 caracteres de 0-9 y a-f. */
+const CUFE_PATTERN = /^[0-9a-f]{96}$/;
+
+export function isValidCufeFormat(cufe: string | null | undefined): boolean {
+  return !!cufe && CUFE_PATTERN.test(cufe.trim().toLowerCase());
+}
+
+/** Portal público de la DIAN — el mismo destino del QR impreso en la factura. */
+export function dianValidationUrl(cufe: string): string {
+  return `https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${encodeURIComponent(
+    cufe.trim().toLowerCase(),
+  )}`;
+}
+
+/** Corta el CUFE para mostrarlo en una línea sin perder el inicio ni el final. */
+export function shortCufe(cufe: string, edge = 12): string {
+  const value = cufe.trim();
+  if (value.length <= edge * 2 + 1) return value;
+  return `${value.slice(0, edge)}…${value.slice(-edge)}`;
+}
+
 // ============ Saldo de caja (puede ser negativo) ============
 
 export interface BalanceDisplay {

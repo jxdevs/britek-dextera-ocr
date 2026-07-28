@@ -1,7 +1,8 @@
 import { AlertTriangle, ArrowLeft, Check, Clock, Eye, FileSpreadsheet, Loader2, Lock, Settings, Trash2, Unlock, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { approvals as approvalsApi, fetchBlobWithAuth, pettyCash, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
+import { BoxDocumentsSection } from '../components/BoxDocumentsSection';
+import { approvals as approvalsApi, fetchBlobWithAuth, pettyCash, DOCUMENT_TYPE_LABEL, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
 
@@ -437,7 +438,14 @@ export default function CajaDetailPage() {
                       className="px-4 py-2 text-slate-900 cursor-pointer hover:text-sky-700"
                       onClick={() => navigate(`/facturas/${m.id}`)}
                     >
-                      {m.vendor_name ?? '—'}
+                      <span className="inline-flex items-center gap-1.5">
+                        {m.vendor_name ?? '—'}
+                        {m.document_type === 'cuenta_cobro' && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700 shrink-0">
+                            {DOCUMENT_TYPE_LABEL.cuenta_cobro}
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-2 text-slate-700 tabular-nums">
                       {m.invoice_number ?? '—'}
@@ -516,22 +524,23 @@ export default function CajaDetailPage() {
                               </button>
                             </>
                           )}
-                          {/* Eliminar — solo admin */}
+                          {/* Sacar de la caja — solo admin. La factura se archiva (no se borra),
+                              pero no entra a la papelera: esa es solo para rechazadas. */}
                           {canEdit && (
                             <button
                               type="button"
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                if (!confirm(`¿Eliminar esta factura de ${m.vendor_name ?? 'Sin proveedor'} por ${formatMoney(parseFloat(m.total))}? Se restaurará el saldo a la caja.`)) return;
+                                if (!confirm(`¿Sacar esta factura de ${m.vendor_name ?? 'Sin proveedor'} por ${formatMoney(parseFloat(m.total))} de la caja? Se restaurará el saldo y la factura se archivará: deja de aparecer en el sistema y no se puede restaurar.`)) return;
                                 try {
                                   await pettyCash.removeMovement(box.id, m.id);
                                   await load();
                                 } catch (err) {
-                                  alert(err instanceof Error ? err.message : 'Error al eliminar');
+                                  alert(err instanceof Error ? err.message : 'Error al sacar la factura');
                                 }
                               }}
                               className="inline-flex items-center gap-0.5 text-xs font-medium text-rose-600 hover:text-rose-800 ml-1"
-                              title="Eliminar factura"
+                              title="Sacar de la caja y archivar"
                             >
                               <Trash2 className="size-3.5" />
                             </button>
@@ -557,6 +566,8 @@ export default function CajaDetailPage() {
           </table>
         )}
       </div>
+
+      <BoxDocumentsSection boxId={box.id} canUpload={canApprove} canDelete={canEdit} />
 
       {/* Modal de reasignar residentes — oculto temporalmente
       {editing && (

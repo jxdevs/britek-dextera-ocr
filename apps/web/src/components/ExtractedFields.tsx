@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ExtractedInvoice, InvoiceItem } from '../lib/api';
-import { cn, formatMoney } from '../lib/utils';
+import { cn, dianValidationUrl, formatMoney, isValidCufeFormat } from '../lib/utils';
 
 /** Format a number as Colombian integer (no decimals, dot as thousands separator) */
 function formatInt(value: number | null | undefined): string {
@@ -111,6 +111,44 @@ export function ExtractedFields({ data }: Props) {
             onChange={(v) => update('invoice_date', v || null)}
             type="date"
           />
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2.5 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-slate-600">CUFE / CUDE</span>
+            {form.cufe && (
+              <span
+                className={cn(
+                  'inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ring-1 ring-inset',
+                  isValidCufeFormat(form.cufe)
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                    : 'bg-amber-50 text-amber-800 ring-amber-200',
+                )}
+              >
+                {isValidCufeFormat(form.cufe)
+                  ? 'Formato válido'
+                  : `Formato dudoso — ${form.cufe.trim().length}/96`}
+              </span>
+            )}
+          </div>
+          <input
+            type="text"
+            value={form.cufe ?? ''}
+            spellCheck={false}
+            placeholder="Sin CUFE — no es una factura electrónica"
+            onChange={(e) => update('cufe', e.target.value.trim().toLowerCase() || null)}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 font-mono text-[11px] leading-relaxed text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+          />
+          {form.cufe && (
+            <a
+              href={dianValidationUrl(form.cufe)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block text-[11px] font-medium text-slate-700 hover:text-slate-900 underline underline-offset-2"
+            >
+              Validar en la DIAN ↗
+            </a>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-3">
