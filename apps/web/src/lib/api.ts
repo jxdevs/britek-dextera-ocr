@@ -215,6 +215,11 @@ export interface Movement {
     created_at: string;
     approver: { id: string; name: string };
   }>;
+  /**
+   * Soportes de identificación (RUT, cédula) que el residente anexó por
+   * WhatsApp o que un admin adjuntó. Solo relevante en cuentas de cobro.
+   */
+  annexes: InvoiceAnnex[];
 }
 
 export interface UpdateBoxInput {
@@ -329,6 +334,16 @@ export interface Invoice {
   worker?: InvoiceWorker;
   box?: InvoiceBox | null;
   approvals?: InvoiceApproval[];
+  /** Soportes de identificación anexados (RUT, cédula). Solo aplica a cuentas de cobro. */
+  annexes?: InvoiceAnnex[];
+}
+
+/** Soporte colgado de un gasto, en la forma reducida que devuelven los listados. */
+export interface InvoiceAnnex {
+  id: string;
+  doc_type: BoxDocumentType;
+  original_name: string | null;
+  created_at: string;
 }
 
 /** Factura en la papelera, con la ventana de restauración ya calculada. */
@@ -375,6 +390,8 @@ export const BOX_DOCUMENT_TYPE_LABEL: Record<BoxDocumentType, string> = {
 export interface BoxDocument {
   id: string;
   box_id: string | null;
+  /** Gasto al que acompaña. null = soporte de la caja en general. */
+  invoice_id: string | null;
   worker_id: string | null;
   doc_type: BoxDocumentType;
   description: string | null;
@@ -387,27 +404,51 @@ export interface BoxDocument {
   created_at: string;
   worker?: { id: string; name: string } | null;
   box?: { id: string; code: string; name: string } | null;
+  invoice?: {
+    id: string;
+    document_type: DocumentType;
+    invoice_number: string | null;
+    vendor_name: string | null;
+    total: string;
+  } | null;
 }
+
+/** Soportes con los que se identifica al prestador de una cuenta de cobro. */
+export const IDENTITY_DOC_TYPES: BoxDocumentType[] = ['rut', 'cedula'];
 
 export const boxDocuments = {
   listByBox: (boxId: string) => request<BoxDocument[]>(`/box-documents/box/${boxId}`),
+  listByInvoice: (invoiceId: string) =>
+    request<BoxDocument[]>(`/box-documents/invoice/${invoiceId}`),
   listUnassigned: () => request<BoxDocument[]>('/box-documents/unassigned'),
   create: (
     boxId: string,
     file: File,
-    input: { doc_type?: BoxDocumentType; description?: string; worker_id?: string } = {},
+    input: {
+      doc_type?: BoxDocumentType;
+      description?: string;
+      worker_id?: string;
+      invoice_id?: string;
+    } = {},
   ) => {
     const form = new FormData();
     form.append('file', file);
     if (input.doc_type) form.append('doc_type', input.doc_type);
     if (input.description) form.append('description', input.description);
     if (input.worker_id) form.append('worker_id', input.worker_id);
+    if (input.invoice_id) form.append('invoice_id', input.invoice_id);
     return request<BoxDocument>(`/box-documents/box/${boxId}`, { method: 'POST', body: form });
   },
   assign: (id: string, boxId: string) =>
     request<BoxDocument>(`/box-documents/${id}/assign`, {
       method: 'POST',
       body: JSON.stringify({ box_id: boxId }),
+    }),
+  /** Cuelga el soporte de una cuenta de cobro concreta. */
+  attach: (id: string, invoiceId: string) =>
+    request<BoxDocument>(`/box-documents/${id}/attach`, {
+      method: 'POST',
+      body: JSON.stringify({ invoice_id: invoiceId }),
     }),
   remove: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/box-documents/${id}`, { method: 'DELETE' }),
@@ -604,18 +645,6 @@ export interface AvailableBalanceItem {
   threshold_alert: 'none' | 'yellow' | 'orange' | 'red';
 }
 
-export interface ExpiringBoxItem {
-  box_id: string;
-  box_code: string;
-  box_name: string;
-  project_name: string | null;
-  worker_name: string;
-  expires_at: string;
-  days_remaining: number;
-  pending_invoices: number;
-  urgency: 'critical' | 'high' | 'medium' | 'low';
-}
-
 export interface TimelyReporting {
   total: number;
   on_time: number;
@@ -639,7 +668,6 @@ export interface DashboardKpis {
   cap_compliance: CapCompliance;
   exception_decisions: ExceptionDecisions;
   available_balances: AvailableBalanceItem[];
-  expiring_boxes: ExpiringBoxItem[];
   timely_reporting: TimelyReporting;
 }
 

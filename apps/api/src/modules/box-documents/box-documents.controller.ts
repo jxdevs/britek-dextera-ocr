@@ -21,6 +21,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { StorageService } from '../storage/storage.service';
 import { BoxDocumentsService } from './box-documents.service';
 import { AssignDocumentDto } from './dto/assign-document.dto';
+import { AttachDocumentDto } from './dto/attach-document.dto';
 import { CreateBoxDocumentDto } from './dto/create-box-document.dto';
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -44,6 +45,13 @@ export class BoxDocumentsController {
   @Roles('admin', 'approver')
   listByBox(@Param('boxId', new ParseUUIDPipe()) boxId: string) {
     return this.service.listByBox(boxId);
+  }
+
+  /** Soportes de un gasto concreto: el RUT y la cédula de una cuenta de cobro. */
+  @Get('invoice/:invoiceId')
+  @Roles('admin', 'approver')
+  listByInvoice(@Param('invoiceId', new ParseUUIDPipe()) invoiceId: string) {
+    return this.service.listByInvoice(invoiceId);
   }
 
   @Get(':id/file')
@@ -86,6 +94,21 @@ export class BoxDocumentsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.assignToBox(id, dto.box_id, user);
+  }
+
+  /**
+   * Cuelga el soporte de un gasto. Resuelve los casos que WhatsApp no pudo
+   * deducir: el residente mandó el RUT pero tenía varias cuentas de cobro
+   * pendientes y no respondió cuál era.
+   */
+  @Post(':id/attach')
+  @Roles('admin', 'approver')
+  attach(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AttachDocumentDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.attachToInvoice(id, dto.invoice_id, user);
   }
 
   @Delete(':id')

@@ -6,6 +6,7 @@ import {
   Model,
   Table,
 } from 'sequelize-typescript';
+import { Invoice } from './invoice.model';
 import { PettyCashBox } from './petty-cash-box.model';
 import { Worker } from './worker.model';
 
@@ -47,6 +48,17 @@ export class BoxDocument extends Model {
   @ForeignKey(() => PettyCashBox)
   @Column({ type: DataType.UUID, allowNull: true })
   declare box_id: string | null;
+
+  /**
+   * Cuenta de cobro (o factura) a la que acompaña. null = anexo de la caja en
+   * general, o soporte que llegó sin que se pudiera deducir de qué gasto es.
+   *
+   * Es lo que permite que el residente mande el RUT hoy y la cédula otro día:
+   * cada archivo se cuelga del mismo gasto sin depender de la conversación.
+   */
+  @ForeignKey(() => Invoice)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare invoice_id: string | null;
 
   /** Residente que aportó el documento. */
   @ForeignKey(() => Worker)
@@ -94,6 +106,9 @@ export class BoxDocument extends Model {
 
   @BelongsTo(() => PettyCashBox, 'box_id')
   declare box: PettyCashBox | null;
+
+  @BelongsTo(() => Invoice, 'invoice_id')
+  declare invoice: Invoice | null;
 
   @BelongsTo(() => Worker, 'worker_id')
   declare worker: Worker | null;

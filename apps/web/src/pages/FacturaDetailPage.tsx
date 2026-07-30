@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowLeft, Check, ExternalLink, Loader2, X } from 'lucid
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AuthFilePreview } from '../components/AuthFilePreview';
+import { InvoiceAnnexes } from '../components/InvoiceAnnexes';
 import {
   ApiError,
   approvals as approvalsApi,
@@ -371,6 +372,9 @@ export default function FacturaDetailPage() {
                 </span>
               </div>
             )}
+
+            {/* Anexos de identificación (solo cuentas de cobro) */}
+            <InvoiceAnnexes documentType={invoice.document_type} annexes={invoice.annexes} />
 
             {/* Alertas de observación */}
             {(invoice.requires_special_approval || invoice.reported_late) && (

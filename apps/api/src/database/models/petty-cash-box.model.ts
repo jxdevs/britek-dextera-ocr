@@ -19,7 +19,9 @@ export class PettyCashBox extends Model {
   @Column({ type: DataType.UUID, primaryKey: true, defaultValue: DataType.UUIDV4 })
   declare id: string;
 
-  @Column({ type: DataType.STRING, allowNull: false, unique: true })
+  /** Etiqueta informativa de la caja. No es única: dos residentes pueden tener
+   *  cajas con el mismo código (las referencias siempre van por `id`). */
+  @Column({ type: DataType.STRING, allowNull: false })
   declare code: string;
 
   @Column({ type: DataType.STRING, allowNull: false })

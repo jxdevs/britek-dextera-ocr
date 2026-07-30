@@ -16,4 +16,12 @@ export class CreateBoxDocumentDto {
   @IsOptional()
   @IsUUID('4')
   worker_id?: string;
+
+  /**
+   * Gasto al que acompaña. Se usa para adjuntar el RUT o la cédula de una cuenta
+   * de cobro concreta; sin él, el soporte queda colgado de la caja en general.
+   */
+  @IsOptional()
+  @IsUUID('4')
+  invoice_id?: string;
 }

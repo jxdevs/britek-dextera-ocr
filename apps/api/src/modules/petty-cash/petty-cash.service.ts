@@ -12,6 +12,7 @@ import { Sequelize } from 'sequelize-typescript';
 import {
   Approval,
   BoxAssignment,
+  BoxDocument,
   Invoice,
   PettyCashBox,
   Worker,
@@ -25,8 +26,6 @@ import { UpdateBoxDto } from './dto/update-box.dto';
 
 /** Tope máximo de caja menor sin excepción */
 const MAX_BOX_AMOUNT = 1_000_000;
-/** Días de plazo para legalizar una caja */
-const BOX_DEADLINE_DAYS = 7;
 /** Máximo de cajas abiertas por residente (la segunda solo como excepción de admin) */
 const MAX_OPEN_BOXES_PER_WORKER = 2;
 
@@ -144,6 +143,14 @@ export class PettyCashService {
             { model: Worker, as: 'approver', attributes: ['id', 'name'] },
           ],
         },
+        // Los soportes (RUT, cédula) para poder marcar las cuentas de cobro que
+        // llegaron sin identificación del prestador.
+        {
+          model: BoxDocument,
+          as: 'annexes',
+          required: false,
+          attributes: ['id', 'doc_type', 'original_name', 'created_at'],
+        },
       ],
       order: [['submitted_at', 'DESC']],
     });
@@ -181,7 +188,6 @@ export class PettyCashService {
     await this.assertPreviousBoxesFullyLegalized(dto.worker_ids);
 
     const openedAt = new Date();
-    const expiresAt = new Date(openedAt.getTime() + BOX_DEADLINE_DAYS * 24 * 60 * 60 * 1000);
 
     try {
       const box = await this.sequelize.transaction(async (t) => {
@@ -195,7 +201,6 @@ export class PettyCashService {
             project_name: dto.project_name,
             cost_center: dto.cost_center,
             opened_at: openedAt,
-            expires_at: expiresAt,
             status: 'open',
             created_by: user.id,
           },
@@ -219,7 +224,7 @@ export class PettyCashService {
 
       const auditAfter: Record<string, unknown> = {
         code: dto.code, name: dto.name, type: dto.type,
-        initial_amount: dto.initial_amount, expires_at: expiresAt.toISOString(),
+        initial_amount: dto.initial_amount,
       };
       if (dto.initial_amount > MAX_BOX_AMOUNT) {
         auditAfter.exception_justification = dto.exception_justification;
@@ -427,6 +432,14 @@ export class PettyCashService {
           include: [
             { model: Worker, as: 'approver', attributes: ['id', 'name'] },
           ],
+        },
+        // Los soportes (RUT, cédula) para poder marcar las cuentas de cobro que
+        // llegaron sin identificación del prestador.
+        {
+          model: BoxDocument,
+          as: 'annexes',
+          required: false,
+          attributes: ['id', 'doc_type', 'original_name', 'created_at'],
         },
       ],
       order: [['submitted_at', 'DESC']],

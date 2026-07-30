@@ -277,6 +277,17 @@ export function BoxDocumentsSection({ boxId, canUpload, canDelete }: Props) {
                       Clasificado por IA
                     </span>
                   )}
+                  {doc.invoice && (
+                    <span
+                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700"
+                      title="Este soporte identifica al prestador de ese gasto"
+                    >
+                      {doc.invoice.document_type === 'cuenta_cobro'
+                        ? 'Cuenta de cobro'
+                        : 'Factura'}
+                      {doc.invoice.invoice_number ? ` #${doc.invoice.invoice_number}` : ''}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-500 truncate">
                   {doc.description ?? doc.original_name ?? '—'}

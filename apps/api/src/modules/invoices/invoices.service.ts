@@ -44,6 +44,14 @@ export type UploadResult =
   | { kind: 'invoice'; invoice: Invoice }
   | { kind: 'document'; document: BoxDocument };
 
+/**
+ * Campos de los soportes que se exponen junto al gasto. Lo justo para saber si a
+ * una cuenta de cobro le falta el RUT o la cédula, sin arrastrar rutas de archivo.
+ */
+const ANNEX_FIELDS = {
+  attributes: ['id', 'doc_type', 'original_name', 'created_at'],
+};
+
 /** Categorías que requieren aprobación especial (admin) */
 const RESTRICTED_CATEGORIES: ExpenseCategory[] = ['alimentacion'];
 
@@ -72,14 +80,20 @@ export class InvoicesService {
    * Sube un documento, lo clasifica con la IA y lo guarda donde corresponda.
    *
    * @param opts.routeSupportDocuments cuando la IA determina que el archivo no
-   * es un gasto (RUT, cédula, cámara de comercio), lo archiva como anexo de la
-   * caja en vez de crear una factura basura. Lo activa la carga desde el panel;
-   * WhatsApp lo deja apagado para conservar su flujo actual.
+   * es un gasto (RUT, cédula, cámara de comercio), lo archiva como anexo en vez
+   * de crear una factura basura.
+   * @param opts.annexInvoiceId gasto al que se debe colgar el soporte. Lo pasa
+   * WhatsApp cuando el residente ya dijo "estos son los anexos de esta cuenta de
+   * cobro"; sin él, el anexo se deduce (ver `createFromClassification`).
    */
   async createFromUpload(
     file: Express.Multer.File,
     workerId: string,
-    opts: { routeSupportDocuments?: boolean; uploadedBy?: string } = {},
+    opts: {
+      routeSupportDocuments?: boolean;
+      uploadedBy?: string;
+      annexInvoiceId?: string | null;
+    } = {},
   ): Promise<UploadResult> {
     if (!ALLOWED_MIME.includes(file.mimetype)) {
       throw new BadRequestException(
@@ -110,7 +124,7 @@ export class InvoicesService {
     // ── Clasificación del documento ──
     const kind = toStringOrNull(data.document_kind)?.toLowerCase();
 
-    // No es un gasto: se archiva como anexo de la caja y no entra a la cola.
+    // No es un gasto: se archiva como anexo y no entra a la cola.
     if (kind === 'soporte' && opts.routeSupportDocuments) {
       const document = await this.supportDocs.createFromClassification({
         workerId,
@@ -118,6 +132,7 @@ export class InvoicesService {
         file,
         subtype: toStringOrNull(data.document_subtype),
         uploadedBy: opts.uploadedBy ?? null,
+        invoiceId: opts.annexInvoiceId ?? null,
       });
       return { kind: 'document', document };
     }
@@ -247,6 +262,7 @@ export class InvoicesService {
       include: [
         { model: Worker, attributes: ['id', 'name', 'document_number', 'phone'] },
         { model: PettyCashBox, attributes: ['id', 'code', 'name', 'type', 'status'] },
+        { model: BoxDocument, as: 'annexes', required: false, ...ANNEX_FIELDS },
       ],
       order: [['submitted_at', 'DESC']],
     });
@@ -257,6 +273,7 @@ export class InvoicesService {
       include: [
         { model: Worker, attributes: ['id', 'name', 'document_number', 'phone'] },
         { model: PettyCashBox, attributes: ['id', 'code', 'name', 'type', 'status'] },
+        { model: BoxDocument, as: 'annexes', required: false, ...ANNEX_FIELDS },
         {
           model: Approval,
           include: [{ model: Worker, as: 'approver', attributes: ['id', 'name'] }],

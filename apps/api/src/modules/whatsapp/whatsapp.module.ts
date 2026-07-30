@@ -8,6 +8,7 @@ import {
   WhatsappEvent,
   Worker,
 } from '../../database/models';
+import { BoxDocumentsModule } from '../box-documents/box-documents.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { KapsoService } from './kapso.service';
 import { WhatsappController } from './whatsapp.controller';
@@ -24,6 +25,7 @@ import { WhatsappService } from './whatsapp.service';
       Approval,
     ]),
     InvoicesModule,
+    BoxDocumentsModule,
   ],
   controllers: [WhatsappController],
   providers: [WhatsappService, KapsoService],

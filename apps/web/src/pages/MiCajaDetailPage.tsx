@@ -1,8 +1,8 @@
-import { AlertTriangle, ArrowLeft, Clock, Loader2, Lock } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Loader2, Lock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { pettyCash, type Movement, type PettyCashBox } from '../lib/api';
-import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
+import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert } from '../lib/utils';
 
 export default function MiCajaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -98,7 +98,6 @@ export default function MiCajaDetailPage() {
         </div>
         <p className="text-sm text-slate-600 mt-1">
           {box.code} · abierta el {new Date(box.opened_at).toLocaleDateString('es-CO')}
-          {box.expires_at && ` · vence el ${new Date(box.expires_at).toLocaleDateString('es-CO')}`}
           {box.closed_at && ` · cerrada el ${new Date(box.closed_at).toLocaleDateString('es-CO')}`}
         </p>
         {(box.project_name || box.cost_center) && (
@@ -160,30 +159,6 @@ export default function MiCajaDetailPage() {
           </div>
         </div>
       )}
-
-      {/* Semáforo de plazo */}
-      {box.status === 'open' && (() => {
-        const deadline = getBoxDeadlineInfo(box.opened_at);
-        return (
-          <div className={cn('flex items-center gap-3 rounded-lg border px-4 py-3', deadline.bannerClasses)}>
-            {deadline.severity === 'overdue' ? (
-              <AlertTriangle className="size-5 shrink-0" />
-            ) : (
-              <Clock className="size-5 shrink-0" />
-            )}
-            <div className="flex-1">
-              <p className="text-sm font-medium">{deadline.bannerLabel}</p>
-              <p className="text-xs mt-0.5 opacity-75">
-                Abierta el {new Date(box.opened_at).toLocaleDateString('es-CO')} — plazo de 7 días
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={cn('size-2.5 rounded-full', deadline.dotColor)} />
-              <span className="text-xs font-semibold uppercase tracking-wide">{deadline.badgeLabel}</span>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Tabla de facturas (solo lectura) */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">

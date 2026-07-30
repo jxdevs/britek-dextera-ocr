@@ -177,7 +177,7 @@ export class ApprovalsService {
       // ── Regla 4b: No se puede aprobar en caja bloqueada ──
       if (box.status === 'blocked') {
         throw new ConflictException(
-          `La caja "${box.code}" está bloqueada por vencimiento de plazo. No se pueden aprobar facturas hasta que un admin la cierre o resuelva.`,
+          `La caja "${box.code}" está bloqueada. No se pueden aprobar facturas hasta que un admin la desbloquee o la cierre.`,
         );
       }
       if (box.status === 'closed') {

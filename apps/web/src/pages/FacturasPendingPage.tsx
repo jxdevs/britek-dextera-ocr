@@ -1,6 +1,7 @@
 import { Loader2, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AnnexBadge } from '../components/AnnexBadge';
 import { AuthImage } from '../components/AuthImage';
 import { InvoiceUploadModal } from '../components/InvoiceUploadModal';
 import {
@@ -242,8 +243,11 @@ export default function FacturasPendingPage() {
                       {inv.vendor_name ?? 'Proveedor desconocido'}
                     </p>
                     {inv.document_type === 'cuenta_cobro' && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 mt-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">
-                        {DOCUMENT_TYPE_LABEL.cuenta_cobro}
+                      <span className="inline-flex items-center gap-1 mt-0.5 flex-wrap">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">
+                          {DOCUMENT_TYPE_LABEL.cuenta_cobro}
+                        </span>
+                        <AnnexBadge documentType={inv.document_type} annexes={inv.annexes} />
                       </span>
                     )}
                   </div>

@@ -2,7 +2,7 @@ import { AlertTriangle, Calendar, ChevronRight, Loader2, User, Users } from 'luc
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { pettyCash, type PettyCashBox } from '../lib/api';
-import { cn, formatMoney, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
+import { cn, formatMoney, getBoxConsumptionAlert } from '../lib/utils';
 
 export default function MisCajasPage() {
   const [items, setItems] = useState<PettyCashBox[]>([]);
@@ -67,7 +67,6 @@ function BoxCard({ box }: { box: PettyCashBox }) {
   const primary = box.workers.find((w) => w.BoxAssignment.is_primary);
   const others = box.workers.filter((w) => !w.BoxAssignment.is_primary);
 
-  const deadline = (box.status === 'open' || box.status === 'blocked') ? getBoxDeadlineInfo(box.opened_at) : null;
   const consumption = (box.status === 'open' || box.status === 'blocked') ? getBoxConsumptionAlert(box.initial_amount, box.current_balance) : null;
 
   return (
@@ -81,9 +80,7 @@ function BoxCard({ box }: { box: PettyCashBox }) {
             ? 'border-orange-300 hover:border-orange-400'
             : consumption?.severity === 'warning'
               ? 'border-amber-300 hover:border-amber-400'
-              : deadline?.severity === 'overdue'
-                ? 'border-rose-300 hover:border-rose-400'
-                : 'border-slate-200 hover:border-slate-300',
+              : 'border-slate-200 hover:border-slate-300',
       )}
     >
       <div className="px-5 py-4 flex items-center gap-6">
@@ -147,21 +144,6 @@ function BoxCard({ box }: { box: PettyCashBox }) {
             />
           </div>
         </div>
-        {/* Semáforo de plazo */}
-        {deadline && (
-          <div className="flex items-center gap-1.5 mr-1">
-            <span className={cn('size-2 rounded-full', deadline.dotColor)} />
-            <span className={cn(
-              'text-[11px] font-semibold tabular-nums',
-              deadline.severity === 'overdue' ? 'text-rose-600' :
-              deadline.severity === 'urgent' ? 'text-orange-600' :
-              deadline.severity === 'warning' ? 'text-amber-600' :
-              'text-emerald-600',
-            )}>
-              {deadline.badgeLabel}
-            </span>
-          </div>
-        )}
         <ChevronRight className="size-4 text-slate-400" />
       </div>
       {/* Alerta compacta de consumo */}

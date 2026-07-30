@@ -14,7 +14,6 @@ import {
   Lock,
   RefreshCw,
   Shield,
-  Users,
   Wallet,
   XCircle,
 } from 'lucide-react';
@@ -483,7 +482,7 @@ export default function DashboardPage() {
             <KpiCard
               label="Cajas Bloqueadas"
               value={String(data.boxes_by_status.blocked)}
-              subtitle={data.boxes_by_status.blocked > 0 ? 'requieren atención inmediata' : 'sin cajas vencidas'}
+              subtitle={data.boxes_by_status.blocked > 0 ? 'requieren atención inmediata' : 'sin cajas bloqueadas'}
               icon={AlertTriangle}
               color={data.boxes_by_status.blocked > 0 ? 'red' : 'emerald'}
             />
@@ -769,101 +768,50 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          {/* ── Row 5: Expiring Boxes + Cap Compliance ── */}
+          {/* ── Row 5: Cap Compliance + Monto en riesgo ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* 5a: Cajas por vencer */}
-            <SectionCard title="🚨 Cajas Próximas a Vencer">
-              {data.expiring_boxes.length === 0 ? (
-                <div className="flex flex-col items-center py-8 text-slate-400">
-                  <CheckCircle2 className="size-8 mb-2" />
-                  <p className="text-sm">Todas las cajas están al día</p>
+            <SectionCard title="Cumplimiento del Tope $1.000.000 (RN-03)">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg bg-slate-50 p-3 text-center">
+                  <p className="text-2xl font-bold text-slate-900">{data.cap_compliance.boxes_over_cap}</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Cajas &gt; tope</p>
+                </div>
+                <div className="rounded-lg bg-emerald-50 p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-700">{data.cap_compliance.with_exception}</p>
+                  <p className="text-[10px] text-emerald-600 uppercase tracking-wider mt-1">Con excepción</p>
+                </div>
+                <div className="rounded-lg bg-red-50 p-3 text-center">
+                  <p className="text-2xl font-bold text-red-700">{data.cap_compliance.without_exception}</p>
+                  <p className="text-[10px] text-red-600 uppercase tracking-wider mt-1">Sin justificar</p>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Detalle del Monto en Riesgo">
+              {data.amount_at_risk.by_reason.length === 0 ? (
+                <div className="flex items-center gap-2 py-4 justify-center text-emerald-600">
+                  <Shield className="size-5" />
+                  <span className="text-sm font-medium">Sin montos en riesgo</span>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {data.expiring_boxes.map((box) => {
-                    const urgencyStyles = {
-                      critical: { bg: 'bg-red-50 border-red-200', badge: 'bg-red-100 text-red-700', label: 'Vencida' },
-                      high: { bg: 'bg-orange-50 border-orange-200', badge: 'bg-orange-100 text-orange-700', label: 'Último día' },
-                      medium: { bg: 'bg-amber-50 border-amber-200', badge: 'bg-amber-100 text-amber-700', label: '2-3 días' },
-                      low: { bg: 'bg-slate-50 border-slate-200', badge: 'bg-slate-100 text-slate-600', label: `${box.days_remaining}d` },
-                    };
-                    const s = urgencyStyles[box.urgency];
-                    return (
-                      <div key={box.box_id} className={cn('rounded-lg border p-3', s.bg)}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-mono text-xs font-bold text-slate-800">{box.box_code}</span>
-                            <span className="text-xs text-slate-500 truncate">{box.box_name}</span>
-                          </div>
-                          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0', s.badge)}>
-                            {s.label}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500">
-                          <span className="flex items-center gap-1">
-                            <Users className="size-3" />
-                            {box.worker_name}
-                          </span>
-                          {box.project_name && (
-                            <span className="truncate">{box.project_name}</span>
-                          )}
-                          <span className="flex items-center gap-1 ml-auto">
-                            <Clock className="size-3" />
-                            {box.pending_invoices} pendiente{box.pending_invoices !== 1 ? 's' : ''}
-                          </span>
-                        </div>
+                <div className="space-y-2">
+                  {data.amount_at_risk.by_reason.map((r) => (
+                    <div key={r.reason} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="size-3.5 text-amber-500" />
+                        <span className="text-xs font-medium text-slate-700">{r.reason}</span>
+                        <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{r.count}</span>
                       </div>
-                    );
-                  })}
+                      <span className="text-xs font-bold text-amber-700 tabular-nums">{fmtCurrencyFull(r.amount)}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <span className="text-xs font-bold text-slate-700">Total en riesgo</span>
+                    <span className="text-sm font-bold text-amber-700 tabular-nums">{fmtCurrencyFull(data.amount_at_risk.total)}</span>
+                  </div>
                 </div>
               )}
             </SectionCard>
-
-            {/* 5b: Cumplimiento del tope + Monto en riesgo detail */}
-            <div className="space-y-4">
-              <SectionCard title="Cumplimiento del Tope $1.000.000 (RN-03)">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-lg bg-slate-50 p-3 text-center">
-                    <p className="text-2xl font-bold text-slate-900">{data.cap_compliance.boxes_over_cap}</p>
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">Cajas &gt; tope</p>
-                  </div>
-                  <div className="rounded-lg bg-emerald-50 p-3 text-center">
-                    <p className="text-2xl font-bold text-emerald-700">{data.cap_compliance.with_exception}</p>
-                    <p className="text-[10px] text-emerald-600 uppercase tracking-wider mt-1">Con excepción</p>
-                  </div>
-                  <div className="rounded-lg bg-red-50 p-3 text-center">
-                    <p className="text-2xl font-bold text-red-700">{data.cap_compliance.without_exception}</p>
-                    <p className="text-[10px] text-red-600 uppercase tracking-wider mt-1">Sin justificar</p>
-                  </div>
-                </div>
-              </SectionCard>
-
-              <SectionCard title="Detalle del Monto en Riesgo">
-                {data.amount_at_risk.by_reason.length === 0 ? (
-                  <div className="flex items-center gap-2 py-4 justify-center text-emerald-600">
-                    <Shield className="size-5" />
-                    <span className="text-sm font-medium">Sin montos en riesgo</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {data.amount_at_risk.by_reason.map((r) => (
-                      <div key={r.reason} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="size-3.5 text-amber-500" />
-                          <span className="text-xs font-medium text-slate-700">{r.reason}</span>
-                          <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{r.count}</span>
-                        </div>
-                        <span className="text-xs font-bold text-amber-700 tabular-nums">{fmtCurrencyFull(r.amount)}</span>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                      <span className="text-xs font-bold text-slate-700">Total en riesgo</span>
-                      <span className="text-sm font-bold text-amber-700 tabular-nums">{fmtCurrencyFull(data.amount_at_risk.total)}</span>
-                    </div>
-                  </div>
-                )}
-              </SectionCard>
-            </div>
           </div>
         </div>
       )}

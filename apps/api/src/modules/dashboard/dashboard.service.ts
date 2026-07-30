@@ -67,18 +67,6 @@ interface AvailableBalanceItem {
   threshold_alert: 'none' | 'yellow' | 'orange' | 'red';
 }
 
-interface ExpiringBoxItem {
-  box_id: string;
-  box_code: string;
-  box_name: string;
-  project_name: string | null;
-  worker_name: string;
-  expires_at: string;
-  days_remaining: number;
-  pending_invoices: number;
-  urgency: 'critical' | 'high' | 'medium' | 'low';
-}
-
 interface TimelyReporting {
   total: number;
   on_time: number;
@@ -102,7 +90,6 @@ export interface DashboardKpis {
   cap_compliance: CapCompliance;
   exception_decisions: ExceptionDecisions;
   available_balances: AvailableBalanceItem[];
-  expiring_boxes: ExpiringBoxItem[];
   timely_reporting: TimelyReporting;
 }
 
@@ -131,7 +118,6 @@ export class DashboardService {
       cap_compliance,
       exception_decisions,
       available_balances,
-      expiring_boxes,
       timely_reporting,
     ] = await Promise.all([
       this.getBoxesByStatus(filters),
@@ -142,7 +128,6 @@ export class DashboardService {
       this.getCapCompliance(filters),
       this.getExceptionDecisions(filters),
       this.getAvailableBalance(filters),
-      this.getExpiringBoxes(filters),
       this.getTimelyReporting(filters),
     ]);
 
@@ -155,7 +140,6 @@ export class DashboardService {
       cap_compliance,
       exception_decisions,
       available_balances,
-      expiring_boxes,
       timely_reporting,
     };
   }
@@ -585,66 +569,7 @@ export class DashboardService {
   }
 
   // ════════════════════════════════════════════════════════════════
-  // 8. CAJAS PRÓXIMAS A VENCER
-  // ════════════════════════════════════════════════════════════════
-
-  private async getExpiringBoxes(filters: DashboardKpisDto): Promise<ExpiringBoxItem[]> {
-    const boxWhere: WhereOptions = {
-      ...this.buildBoxWhere(filters),
-      status: { [Op.in]: ['open', 'blocked'] },
-      expires_at: { [Op.ne]: null },
-    };
-
-    const boxes = await this.boxes.findAll({
-      where: boxWhere,
-      include: [
-        {
-          model: Worker,
-          attributes: ['id', 'name'],
-          through: { attributes: ['is_primary'] },
-        },
-        {
-          model: Invoice,
-          where: { status: { [Op.in]: ['pending', 'observed'] } },
-          required: false,
-          attributes: ['id'],
-        },
-      ],
-      order: [['expires_at', 'ASC']],
-    });
-
-    const now = new Date();
-    return boxes.map((box) => {
-      const expiresAt = new Date(box.expires_at!);
-      const daysRemaining = Math.ceil(
-        (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      let urgency: ExpiringBoxItem['urgency'] = 'low';
-      if (daysRemaining <= 0) urgency = 'critical';
-      else if (daysRemaining <= 1) urgency = 'high';
-      else if (daysRemaining <= 3) urgency = 'medium';
-
-      const primaryWorker = (box.workers || []).find(
-        (w: any) => w.BoxAssignment?.is_primary,
-      ) || (box.workers || [])[0];
-
-      return {
-        box_id: box.id,
-        box_code: box.code,
-        box_name: box.name,
-        project_name: box.project_name,
-        worker_name: primaryWorker?.name || 'Sin asignar',
-        expires_at: box.expires_at!.toString(),
-        days_remaining: daysRemaining,
-        pending_invoices: (box.invoices || []).length,
-        urgency,
-      };
-    });
-  }
-
-  // ════════════════════════════════════════════════════════════════
-  // 9. % REPORTE OPORTUNO
+  // 8. % REPORTE OPORTUNO
   // ════════════════════════════════════════════════════════════════
 
   private async getTimelyReporting(filters: DashboardKpisDto): Promise<TimelyReporting> {

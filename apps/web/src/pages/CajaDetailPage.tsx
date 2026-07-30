@@ -1,10 +1,11 @@
-import { AlertTriangle, ArrowLeft, Check, Clock, Eye, FileSpreadsheet, Loader2, Lock, Settings, Trash2, Unlock, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Eye, FileSpreadsheet, Loader2, Lock, Settings, Trash2, Unlock, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { AnnexBadge } from '../components/AnnexBadge';
 import { BoxDocumentsSection } from '../components/BoxDocumentsSection';
 import { approvals as approvalsApi, fetchBlobWithAuth, pettyCash, DOCUMENT_TYPE_LABEL, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert, getBoxDeadlineInfo } from '../lib/utils';
+import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert } from '../lib/utils';
 
 export default function CajaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -162,7 +163,6 @@ export default function CajaDetailPage() {
           </div>
           <p className="text-sm text-slate-600 mt-1">
             {box.code} · abierta el {new Date(box.opened_at).toLocaleDateString('es-CO')}
-            {box.expires_at && ` · vence el ${new Date(box.expires_at).toLocaleDateString('es-CO')}`}
             {box.closed_at && ` · cerrada el ${new Date(box.closed_at).toLocaleDateString('es-CO')}`}
           </p>
           {(box.project_name || box.cost_center) && (
@@ -337,30 +337,6 @@ export default function CajaDetailPage() {
         </div>
       )}
 
-      {/* Semáforo de plazo — solo para cajas abiertas */}
-      {box.status === 'open' && (() => {
-        const deadline = getBoxDeadlineInfo(box.opened_at);
-        return (
-          <div className={cn('flex items-center gap-3 rounded-lg border px-4 py-3', deadline.bannerClasses)}>
-            {deadline.severity === 'overdue' ? (
-              <AlertTriangle className="size-5 shrink-0" />
-            ) : (
-              <Clock className="size-5 shrink-0" />
-            )}
-            <div className="flex-1">
-              <p className="text-sm font-medium">{deadline.bannerLabel}</p>
-              <p className="text-xs mt-0.5 opacity-75">
-                Abierta el {new Date(box.opened_at).toLocaleDateString('es-CO')} — plazo de 7 días
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={cn('size-2.5 rounded-full', deadline.dotColor)} />
-              <span className="text-xs font-semibold uppercase tracking-wide">{deadline.badgeLabel}</span>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Sección de residentes asignados — oculta temporalmente
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-200">
@@ -445,6 +421,7 @@ export default function CajaDetailPage() {
                             {DOCUMENT_TYPE_LABEL.cuenta_cobro}
                           </span>
                         )}
+                        <AnnexBadge documentType={m.document_type} annexes={m.annexes} />
                       </span>
                     </td>
                     <td className="px-4 py-2 text-slate-700 tabular-nums">

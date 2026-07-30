@@ -10,6 +10,7 @@ import {
 import { Worker } from './worker.model';
 import { PettyCashBox } from './petty-cash-box.model';
 import { Approval } from './approval.model';
+import { BoxDocument } from './box-document.model';
 
 export type InvoiceStatus = 'pending' | 'observed' | 'approved' | 'rejected';
 
@@ -148,4 +149,12 @@ export class Invoice extends Model {
 
   @HasMany(() => Approval, 'invoice_id')
   declare approvals: Approval[];
+
+  /**
+   * Soportes que acompañan a este gasto (RUT, cédula del prestador). Van aparte
+   * porque no tienen valor ni se legalizan; aquí solo se exponen para saber si a
+   * una cuenta de cobro le falta identificación.
+   */
+  @HasMany(() => BoxDocument, 'invoice_id')
+  declare annexes: BoxDocument[];
 }
