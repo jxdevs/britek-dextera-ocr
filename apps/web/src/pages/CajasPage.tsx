@@ -1,5 +1,5 @@
-import { AlertTriangle, Calendar, ChevronRight, Filter, Loader2, Plus, SquareCheck, Users, User } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Bell, Calendar, ChevronRight, Filter, Loader2, Lock, Plus, SquareCheck, Users, User } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { pettyCash, type BoxStatus, type PettyCashBox } from '../lib/api';
@@ -75,14 +75,17 @@ export default function CajasPage() {
             Individual: anticipo de un residente. Compartida: bolsa común para varios.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 hover:bg-slate-800 px-3 py-2 text-sm font-medium text-white"
-        >
-          <Plus className="size-4" />
-          Nueva caja
-        </button>
+        <div className="flex items-center gap-2">
+          <ClosedBoxesBell boxes={items} />
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 hover:bg-slate-800 px-3 py-2 text-sm font-medium text-white"
+          >
+            <Plus className="size-4" />
+            Nueva caja
+          </button>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -192,6 +195,189 @@ export default function CajasPage() {
             await load();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/** Días que abarca el historial de cierres del panel, contando hoy. */
+const CLOSED_HISTORY_DAYS = 5;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function startOfDay(d: Date) {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+/** "Hoy" / "Ayer" / "viernes, 15 de agosto" según qué tan atrás quedó el día. */
+function dayLabel(day: Date) {
+  const diff = Math.round(
+    (startOfDay(new Date()).getTime() - startOfDay(day).getTime()) / DAY_MS,
+  );
+  if (diff === 0) return 'Hoy';
+  if (diff === 1) return 'Ayer';
+  return day.toLocaleDateString('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
+/**
+ * Campana de cierres: el contador avisa cuántas cajas se cerraron hoy y el panel
+ * muestra el historial de los últimos {@link CLOSED_HISTORY_DAYS} días agrupado
+ * por día. Se calcula sobre todas las cajas cargadas, no sobre las filtradas:
+ * un cierre no debe desaparecer del aviso porque el filtro esté en "Abiertas".
+ */
+function ClosedBoxesBell({ boxes }: { boxes: PettyCashBox[] }) {
+  const [open, setOpen] = useState(false);
+  const wrapper = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!wrapper.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  // Cierres recientes agrupados por día, del más nuevo al más viejo.
+  const groups = useMemo(() => {
+    const cutoff =
+      startOfDay(new Date()).getTime() - (CLOSED_HISTORY_DAYS - 1) * DAY_MS;
+    const recent = boxes
+      .filter(
+        (b) =>
+          b.status === 'closed' &&
+          b.closed_at &&
+          new Date(b.closed_at).getTime() >= cutoff,
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.closed_at!).getTime() - new Date(a.closed_at!).getTime(),
+      );
+
+    const byDay = new Map<number, PettyCashBox[]>();
+    for (const box of recent) {
+      const key = startOfDay(new Date(box.closed_at!)).getTime();
+      const sameDay = byDay.get(key);
+      if (sameDay) sameDay.push(box);
+      else byDay.set(key, [box]);
+    }
+    return Array.from(byDay, ([time, items]) => ({ time, items }));
+  }, [boxes]);
+
+  const todayKey = startOfDay(new Date()).getTime();
+  const closedToday = groups.find((g) => g.time === todayKey)?.items.length ?? 0;
+  const total = groups.reduce((sum, g) => sum + g.items.length, 0);
+
+  return (
+    <div className="relative" ref={wrapper}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={
+          closedToday > 0
+            ? `${closedToday} caja(s) cerrada(s) hoy`
+            : 'Historial de cierres'
+        }
+        title={
+          closedToday > 0
+            ? `${closedToday} caja(s) cerrada(s) hoy`
+            : `Sin cierres hoy · ${total} en los últimos ${CLOSED_HISTORY_DAYS} días`
+        }
+        className={cn(
+          'relative inline-flex items-center justify-center rounded-md border px-2.5 py-2 transition-colors',
+          open
+            ? 'border-slate-400 bg-slate-100 text-slate-900'
+            : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50',
+        )}
+      >
+        <Bell className="size-4" />
+        {closedToday > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 rounded-full bg-rose-600 text-[10px] font-bold text-white flex items-center justify-center tabular-nums">
+            {closedToday}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-96 max-h-[70vh] overflow-y-auto z-20 bg-white border border-slate-200 rounded-lg shadow-lg">
+          <div className="sticky top-0 bg-white px-4 py-3 border-b border-slate-200">
+            <p className="text-sm font-semibold text-slate-900">Cajas cerradas</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {closedToday > 0
+                ? `${closedToday} hoy · últimos ${CLOSED_HISTORY_DAYS} días`
+                : `Ninguna hoy · últimos ${CLOSED_HISTORY_DAYS} días`}
+            </p>
+          </div>
+
+          {total === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-500">
+              No se han cerrado cajas en los últimos {CLOSED_HISTORY_DAYS} días.
+            </p>
+          ) : (
+            groups.map((group) => (
+              <div key={group.time}>
+                <p className="px-4 py-1.5 bg-slate-50 border-y border-slate-100 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {dayLabel(new Date(group.time))} · {group.items.length}
+                </p>
+                {group.items.map((box) => {
+                  const primary =
+                    box.workers.find((w) => w.BoxAssignment.is_primary) ??
+                    box.workers[0];
+                  // Una caja puede cerrarse sobregirada: el saldo se muestra como
+                  // "a favor del residente" igual que en el resto de la app.
+                  const balance = getBalanceDisplay(box.current_balance);
+                  return (
+                    <Link
+                      key={box.id}
+                      to={`/cajas/${box.id}`}
+                      onClick={() => setOpen(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                    >
+                      <Lock className="size-3.5 text-slate-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">
+                          {box.name}
+                        </p>
+                        <p className="text-xs text-slate-500 truncate">
+                          {box.code}
+                          {primary ? ` · ${primary.name}` : ''}
+                        </p>
+                      </div>
+                      <div
+                        className="text-right shrink-0"
+                        title={`Cerrada a las ${new Date(box.closed_at!).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })} · ${balance.amount} ${balance.caption}`}
+                      >
+                        <p className="text-xs text-slate-500 tabular-nums">
+                          {new Date(box.closed_at!).toLocaleTimeString('es-CO', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                        <p className={cn('text-xs font-medium tabular-nums', balance.textClass)}>
+                          {balance.amount}
+                        </p>
+                      </div>
+                      <ChevronRight className="size-3.5 text-slate-400 shrink-0" />
+                    </Link>
+                  );
+                })}
+              </div>
+            ))
+          )}
+        </div>
       )}
     </div>
   );
