@@ -24,6 +24,38 @@ import { AssignWorkersDto } from './dto/assign-workers.dto';
 import { CreateBoxDto } from './dto/create-box.dto';
 import { UpdateBoxDto } from './dto/update-box.dto';
 
+/**
+ * Contadores de causación por caja. Van como subconsultas porque el listado no
+ * incluye las facturas: `accrued` son las ya causadas y `pending` las que están
+ * legalizadas esperando causación (el total causable es la suma de ambas).
+ */
+const ACCRUAL_COUNTERS: [ReturnType<typeof Sequelize.literal>, string][] = [
+  [
+    Sequelize.literal(`(
+      SELECT COUNT(*)::int FROM invoices i
+      WHERE i.box_id = "PettyCashBox"."id"
+        AND i.deleted_at IS NULL
+        AND i.accrued_at IS NOT NULL
+    )`),
+    'accrued_count',
+  ],
+  [
+    Sequelize.literal(`(
+      SELECT COUNT(*)::int FROM invoices i
+      WHERE i.box_id = "PettyCashBox"."id"
+        AND i.deleted_at IS NULL
+        AND i.status = 'approved'
+        AND i.accrued_at IS NULL
+    )`),
+    'pending_accrual_count',
+  ],
+];
+
+/** Nombre de quien causó la factura; subconsulta porque accrued_by no tiene FK. */
+const ACCRUED_BY_NAME = Sequelize.literal(
+  '(SELECT w.name FROM workers w WHERE w.id = "Invoice"."accrued_by")',
+);
+
 /** Tope máximo de caja menor sin excepción */
 const MAX_BOX_AMOUNT = 1_000_000;
 /** Máximo de cajas abiertas por residente (la segunda solo como excepción de admin) */
@@ -46,6 +78,7 @@ export class PettyCashService {
 
   async list() {
     return this.boxes.findAll({
+      attributes: { include: ACCRUAL_COUNTERS },
       include: [
         {
           model: Worker,
@@ -423,6 +456,8 @@ export class PettyCashService {
         'id', 'vendor_name', 'vendor_nit', 'invoice_number', 'invoice_date', 'cufe',
         'document_type', 'total', 'status', 'submitted_at', 'expense_category',
         'requires_special_approval', 'reported_late',
+        'accrued_at', 'accrued_by',
+        [ACCRUED_BY_NAME, 'accrued_by_name'],
       ],
       include: [
         {

@@ -7,6 +7,7 @@ import {
   Header,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   StreamableFile,
@@ -22,6 +23,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { StorageService } from '../storage/storage.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
+import { SetAccrualDto } from './dto/set-accrual.dto';
 import { InvoicesService } from './invoices.service';
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -90,6 +92,20 @@ export class InvoicesController {
       routeSupportDocuments: true,
       uploadedBy: user.id,
     });
+  }
+
+  /**
+   * Confirma (o revierte) la causación contable. Es un estado independiente de
+   * la legalización: solo el admin lo marca, y solo sobre facturas legalizadas.
+   */
+  @Patch(':id/accrual')
+  @Roles('admin')
+  setAccrual(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SetAccrualDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.setAccrual(id, dto.accrued, user);
   }
 
   @Post(':id/restore')

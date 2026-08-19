@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Check, ExternalLink, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, ExternalLink, Loader2, SquareCheck, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AuthFilePreview } from '../components/AuthFilePreview';
@@ -239,6 +239,18 @@ export default function FacturaDetailPage() {
           >
             {STATUS_LABEL[invoice.status]}
           </span>
+          {invoice.accrued_at && (
+            <>
+              <span>·</span>
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200"
+                title={`Causada en contabilidad el ${new Date(invoice.accrued_at).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}${invoice.accrued_by_name ? ` por ${invoice.accrued_by_name}` : ''}`}
+              >
+                <SquareCheck className="size-3" />
+                Causada
+              </span>
+            </>
+          )}
         </div>
       </div>
 

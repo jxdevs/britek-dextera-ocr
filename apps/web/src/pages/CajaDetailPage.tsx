@@ -1,10 +1,11 @@
-import { AlertTriangle, ArrowLeft, Check, Eye, FileSpreadsheet, Loader2, Lock, Settings, Trash2, Unlock, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Copy, Eye, FileSpreadsheet, Loader2, Lock, Search, Settings, Square, SquareCheck, Trash2, Unlock, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnnexBadge } from '../components/AnnexBadge';
 import { BoxDocumentsSection } from '../components/BoxDocumentsSection';
-import { approvals as approvalsApi, fetchBlobWithAuth, pettyCash, DOCUMENT_TYPE_LABEL, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
+import { approvals as approvalsApi, fetchBlobWithAuth, invoices as invoicesApi, pettyCash, DOCUMENT_TYPE_LABEL, type Movement, type PettyCashBox, type UpdateBoxInput } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { useScrollRestoration, useSessionState } from '../lib/listState';
 import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert } from '../lib/utils';
 
 export default function CajaDetailPage() {
@@ -23,6 +24,11 @@ export default function CajaDetailPage() {
   const [unblocking, setUnblocking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [invoiceFilter, setInvoiceFilter] = useSessionState(`caja:${id}:invoiceFilter`, '');
+  const [onlyDuplicates, setOnlyDuplicates] = useSessionState(`caja:${id}:onlyDuplicates`, false);
+  const [onlyUnaccrued, setOnlyUnaccrued] = useSessionState(`caja:${id}:onlyUnaccrued`, false);
+  /** Factura cuya causación se está guardando; bloquea solo ese botón. */
+  const [accruingId, setAccruingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -42,6 +48,9 @@ export default function CajaDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Al volver del detalle de una factura, retomar la misma altura de la caja.
+  useScrollRestoration(`caja:${id}:scroll`, !loading && !!box);
 
   const handleClose = async () => {
     if (!box) return;
@@ -70,6 +79,33 @@ export default function CajaDetailPage() {
       alert(err instanceof Error ? err.message : 'Error al desbloquear');
     } finally {
       setUnblocking(false);
+    }
+  };
+
+  /**
+   * Marca o revierte la causación contable de una factura. Se actualiza solo la
+   * fila afectada: recargar la caja completa perdería la posición del scroll.
+   */
+  const handleToggleAccrual = async (m: Movement) => {
+    setAccruingId(m.id);
+    try {
+      const updated = await invoicesApi.setAccrual(m.id, !m.accrued_at);
+      setMovements((prev) =>
+        prev.map((row) =>
+          row.id === m.id
+            ? {
+                ...row,
+                accrued_at: updated.accrued_at ?? null,
+                accrued_by: updated.accrued_by ?? null,
+                accrued_by_name: updated.accrued_by_name ?? null,
+              }
+            : row,
+        ),
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al actualizar la causación');
+    } finally {
+      setAccruingId(null);
     }
   };
 
@@ -129,6 +165,43 @@ export default function CajaDetailPage() {
   const consumedPct = initial > 0 ? (consumed / initial) * 100 : 0;
   const legalizedPct = initial > 0 ? (legalized / initial) * 100 : 0;
   const availablePct = initial > 0 ? (available / initial) * 100 : 0;
+
+  // Facturas repetidas: mismo numero de factura, mismo proveedor y mismo monto.
+  // Se compara tambien proveedor y monto porque las cuentas de cobro suelen venir
+  // numeradas con "1" y solo por numero darian falsos positivos.
+  const duplicateKey = (m: Movement) =>
+    [
+      (m.invoice_number ?? '').trim().toLowerCase(),
+      (m.vendor_name ?? '').trim().toLowerCase(),
+      parseFloat(m.total),
+    ].join('|');
+  const duplicateCounts = movements.reduce<Record<string, number>>((acc, m) => {
+    if (!m.invoice_number?.trim()) return acc;
+    const key = duplicateKey(m);
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  const duplicateTimes = (m: Movement) => duplicateCounts[duplicateKey(m)] ?? 0;
+  const isDuplicate = (m: Movement) => duplicateTimes(m) > 1;
+  const duplicateCount = movements.filter(isDuplicate).length;
+
+  // Causación contable: solo aplica a las facturas ya legalizadas.
+  const canAccrue = (m: Movement) => m.status === 'approved';
+  const accruableMovements = movements.filter(canAccrue);
+  const accruedCount = accruableMovements.filter((m) => m.accrued_at).length;
+  const unaccruedCount = accruableMovements.length - accruedCount;
+
+  const invoiceQuery = invoiceFilter.trim().toLowerCase();
+  const filteredMovements = movements.filter((m) => {
+    if (onlyDuplicates && !isDuplicate(m)) return false;
+    if (onlyUnaccrued && !(canAccrue(m) && !m.accrued_at)) return false;
+    if (!invoiceQuery) return true;
+    return (m.invoice_number ?? '').toLowerCase().includes(invoiceQuery);
+  });
+  const filterActive = invoiceQuery.length > 0 || onlyDuplicates || onlyUnaccrued;
+  const filteredTotal = filteredMovements
+    .filter((m) => m.status !== 'rejected')
+    .reduce((sum, m) => sum + parseFloat(m.total), 0);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -264,7 +337,7 @@ export default function CajaDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <Card label="Monto inicial" value={formatMoney(initial)} muted="asignado a la caja" />
         <Card
           label={balance.isOverdrawn ? 'Saldo a favor' : 'Disponible'}
@@ -275,19 +348,21 @@ export default function CajaDetailPage() {
         <Card
           label="Total en facturas"
           value={formatMoney(consumed)}
-          muted={`legalizadas + pendientes · ${consumedPct.toFixed(1)}% del monto`}
+          muted={`${consumedPct.toFixed(1)}% del monto`}
+          hint={`Legalizadas + pendientes · ${consumedPct.toFixed(1)}% del monto asignado`}
         />
         <Card label="Legalizado" value={formatMoney(legalized)} muted={`${legalizedPct.toFixed(1)}% del monto`} />
         <Card
-          label="Pendiente por legalizar"
+          label="Pendiente"
           value={formatMoney(pendingAmount)}
-          muted={pendingCount > 0 ? `${pendingCount} ${pendingCount === 1 ? 'factura' : 'facturas'} por revisar` : 'todo legalizado'}
+          muted={pendingCount > 0 ? `${pendingCount} por revisar` : 'todo legalizado'}
           valueClass={pendingCount > 0 ? 'text-amber-600' : 'text-slate-900'}
+          hint="Pendiente por legalizar"
         />
         <Card
           label="Rechazado"
           value={formatMoney(rejectedAmount)}
-          muted={rejectedCount > 0 ? `${rejectedCount} ${rejectedCount === 1 ? 'factura' : 'facturas'} rechazadas` : 'sin rechazos'}
+          muted={rejectedCount > 0 ? `${rejectedCount} ${rejectedCount === 1 ? 'factura' : 'facturas'}` : 'sin rechazos'}
           valueClass={rejectedCount > 0 ? 'text-rose-600' : 'text-slate-900'}
         />
       </div>
@@ -373,14 +448,89 @@ export default function CajaDetailPage() {
       */}
 
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-200">
+        <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center gap-3">
           <h3 className="text-sm font-semibold text-slate-900">
-            Facturas ({movements.length})
+            Facturas ({filterActive ? `${filteredMovements.length} de ${movements.length}` : movements.length})
           </h3>
+          <div className="flex-1" />
+          {accruableMovements.length > 0 && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ring-inset',
+                unaccruedCount === 0
+                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                  : 'bg-slate-50 text-slate-600 ring-slate-200',
+              )}
+              title="Facturas legalizadas ya causadas en contabilidad"
+            >
+              <SquareCheck className="size-3" />
+              Causadas {accruedCount} de {accruableMovements.length}
+            </span>
+          )}
+          {unaccruedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setOnlyUnaccrued((v) => !v)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ring-inset transition-colors',
+                onlyUnaccrued
+                  ? 'bg-orange-500 text-white ring-orange-500'
+                  : 'bg-orange-50 text-orange-700 ring-orange-200 hover:bg-orange-100',
+              )}
+              title="Mostrar solo las facturas legalizadas pendientes de causación"
+            >
+              <Square className="size-3" />
+              {unaccruedCount} sin causar
+            </button>
+          )}
+          {duplicateCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setOnlyDuplicates((v) => !v)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ring-inset transition-colors',
+                onlyDuplicates
+                  ? 'bg-amber-500 text-white ring-amber-500'
+                  : 'bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100',
+              )}
+              title="Mostrar solo las facturas repetidas (mismo proveedor, mismo número y mismo monto)"
+            >
+              <Copy className="size-3" />
+              {duplicateCount} repetidas
+            </button>
+          )}
+          <div className="relative">
+            <Search className="size-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={invoiceFilter}
+              onChange={(e) => setInvoiceFilter(e.target.value)}
+              placeholder="Filtrar por N.° de factura"
+              className="w-60 rounded-md border border-slate-200 py-1 pl-7 pr-7 text-xs text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+            />
+            {invoiceFilter && (
+              <button
+                type="button"
+                onClick={() => setInvoiceFilter('')}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                title="Limpiar filtro"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
         </div>
         {movements.length === 0 ? (
           <div className="py-12 text-center text-sm text-slate-500">
             Sin facturas. Aparecerán aquí cuando el residente las suba por WhatsApp.
+          </div>
+        ) : filteredMovements.length === 0 ? (
+          <div className="py-12 text-center text-sm text-slate-500">
+            {onlyUnaccrued
+              ? 'No quedan facturas pendientes de causación en esta caja.'
+              : onlyDuplicates
+                ? 'No hay facturas repetidas en esta caja.'
+                : `Ninguna factura coincide con "${invoiceFilter.trim()}".`}
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -391,13 +541,14 @@ export default function CajaDetailPage() {
                 <th className="text-left px-4 py-2 font-medium">Factura</th>
                 <th className="text-right px-4 py-2 font-medium">Monto</th>
                 <th className="text-center px-4 py-2 font-medium">Estado</th>
+                <th className="text-center px-4 py-2 font-medium">Causada</th>
                 <th className="text-left px-4 py-2 font-medium">Aprobador</th>
                 <th className="text-center px-4 py-2 font-medium">Soporte</th>
                 {(canEdit || canApprove) && <th className="text-center px-4 py-2 font-medium">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {movements.map((m) => {
+              {filteredMovements.map((m) => {
                 const approval = m.approvals?.[0];
                 return (
                   <tr
@@ -405,6 +556,7 @@ export default function CajaDetailPage() {
                     className={cn(
                       'hover:bg-slate-50 transition-colors',
                       m.status === 'rejected' && 'opacity-50',
+                      isDuplicate(m) && 'bg-amber-50/70',
                     )}
                   >
                     <td className="px-4 py-2 text-slate-700 tabular-nums">
@@ -425,7 +577,17 @@ export default function CajaDetailPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-slate-700 tabular-nums">
-                      {m.invoice_number ?? '—'}
+                      <span className="inline-flex items-center gap-1.5">
+                        {m.invoice_number ?? '—'}
+                        {isDuplicate(m) && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 shrink-0"
+                            title={`Aparece ${duplicateTimes(m)} veces con el mismo proveedor y el mismo monto`}
+                          >
+                            Repetida ×{duplicateTimes(m)}
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-2 text-right text-slate-900 tabular-nums font-medium">
                       {formatMoney(parseFloat(m.total))}
@@ -443,6 +605,55 @@ export default function CajaDetailPage() {
                       )}>
                         {m.status === 'approved' ? 'Legalizada' : m.status === 'rejected' ? 'Rechazada' : m.status === 'observed' ? 'Observada' : 'Pendiente'}
                       </span>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      {!canAccrue(m) ? (
+                        <span
+                          className="text-slate-300"
+                          title="Solo se causan las facturas legalizadas"
+                        >
+                          —
+                        </span>
+                      ) : canEdit ? (
+                        <button
+                          type="button"
+                          disabled={accruingId === m.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleAccrual(m);
+                          }}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold ring-1 ring-inset transition-colors disabled:opacity-50',
+                            m.accrued_at
+                              ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100'
+                              : 'bg-white text-slate-600 ring-slate-300 hover:bg-slate-50',
+                          )}
+                          title={
+                            m.accrued_at
+                              ? `Causada el ${new Date(m.accrued_at).toLocaleDateString('es-CO')}${m.accrued_by_name ? ` por ${m.accrued_by_name}` : ''}. Clic para revertir.`
+                              : 'Marcar como causada en contabilidad'
+                          }
+                        >
+                          {accruingId === m.id ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : m.accrued_at ? (
+                            <SquareCheck className="size-3" />
+                          ) : (
+                            <Square className="size-3" />
+                          )}
+                          {m.accrued_at ? 'Causada' : 'Causar'}
+                        </button>
+                      ) : m.accrued_at ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700"
+                          title={`Causada el ${new Date(m.accrued_at).toLocaleDateString('es-CO')}${m.accrued_by_name ? ` por ${m.accrued_by_name}` : ''}`}
+                        >
+                          <SquareCheck className="size-3" />
+                          Causada
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">Sin causar</span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-slate-700">
                       {approval?.approver?.name ?? '—'}
@@ -532,12 +743,12 @@ export default function CajaDetailPage() {
             <tfoot className="border-t-2 border-slate-200 bg-slate-50">
               <tr>
                 <td colSpan={3} className="px-4 py-2 text-sm font-semibold text-slate-900 text-right">
-                  Total consumido
+                  {filterActive ? 'Total filtrado' : 'Total consumido'}
                 </td>
                 <td className="px-4 py-2 text-right text-sm font-bold text-slate-900 tabular-nums">
-                  {formatMoney(activeMovements.reduce((sum, m) => sum + parseFloat(m.total), 0))}
+                  {formatMoney(filteredTotal)}
                 </td>
-                <td colSpan={(canEdit || canApprove) ? 4 : 3} />
+                <td colSpan={(canEdit || canApprove) ? 5 : 4} />
               </tr>
             </tfoot>
           </table>
@@ -757,17 +968,20 @@ function Card({
   value,
   muted,
   valueClass = 'text-slate-900',
+  hint,
 }: {
   label: string;
   value: string;
   muted: string;
   valueClass?: string;
+  /** Texto completo cuando la etiqueta o el detalle van abreviados en la tarjeta. */
+  hint?: string;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className={cn('mt-1 text-2xl font-semibold tabular-nums', valueClass)}>{value}</p>
-      <p className="text-xs text-slate-500 tabular-nums">{muted}</p>
+    <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 min-w-0" title={hint}>
+      <p className="text-[11px] font-medium text-slate-500 truncate">{label}</p>
+      <p className={cn('text-lg font-semibold tabular-nums truncate', valueClass)}>{value}</p>
+      <p className="text-[11px] text-slate-500 tabular-nums truncate">{muted}</p>
     </div>
   );
 }

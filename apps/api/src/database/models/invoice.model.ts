@@ -126,6 +126,22 @@ export class Invoice extends Model {
   @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
   declare reported_late: boolean;
 
+  /**
+   * Momento en que un admin confirmó la causación contable. null = pendiente de
+   * causar. Es un estado aparte de `status`: primero se legaliza la factura
+   * (approved) y después contabilidad la causa.
+   */
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare accrued_at: Date | null;
+
+  /**
+   * Quién confirmó la causación. Sin @ForeignKey por lo mismo que `deleted_by`:
+   * una segunda asociación a Worker volvería ambiguos los `include` que ya usan
+   * worker_id.
+   */
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare accrued_by: string | null;
+
   @Column({ type: DataType.DATE, allowNull: false, defaultValue: DataType.NOW })
   declare submitted_at: Date;
 

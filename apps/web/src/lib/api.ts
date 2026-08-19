@@ -176,6 +176,13 @@ export interface PettyCashBox {
   created_at: string;
   updated_at: string;
   workers: BoxWorker[];
+  /**
+   * Facturas de la caja ya causadas en contabilidad. Solo lo trae el listado
+   * (`list`/`listMine`), no el detalle de una caja.
+   */
+  accrued_count?: number;
+  /** Facturas legalizadas esperando causación. El total causable es la suma de ambos. */
+  pending_accrual_count?: number;
 }
 
 export interface CreateBoxInput {
@@ -208,6 +215,15 @@ export interface Movement {
   expense_category: ExpenseCategory | null;
   requires_special_approval: boolean;
   reported_late: boolean;
+  /**
+   * Momento de la causación contable. null = pendiente de causar. Opcional
+   * porque el endpoint del residente (`movementsMine`) no expone la causación:
+   * es información contable interna.
+   */
+  accrued_at?: string | null;
+  accrued_by?: string | null;
+  /** Nombre de quien confirmó la causación, resuelto por el backend. */
+  accrued_by_name?: string | null;
   approvals: Array<{
     id: string;
     action: 'approve' | 'reject';
@@ -326,6 +342,10 @@ export interface Invoice {
   expense_category: ExpenseCategory | null;
   requires_special_approval: boolean;
   reported_late: boolean;
+  /** Momento de la causación contable. null = pendiente de causar. */
+  accrued_at?: string | null;
+  accrued_by?: string | null;
+  accrued_by_name?: string | null;
   submitted_at: string;
   /** Fecha de envío a la papelera. null = activa. La fila nunca se borra. */
   deleted_at: string | null;
@@ -494,6 +514,15 @@ export const invoices = {
       `/invoices/${id}`,
       { method: 'DELETE' },
     ),
+  /**
+   * Confirma o revierte la causación contable (solo admin). Es un estado aparte
+   * de la legalización: la factura ya debe estar legalizada.
+   */
+  setAccrual: (id: string, accrued: boolean) =>
+    request<Invoice>(`/invoices/${id}/accrual`, {
+      method: 'PATCH',
+      body: JSON.stringify({ accrued }),
+    }),
   trash: () => request<TrashedInvoice[]>('/invoices/trash'),
   restore: (id: string) => request<Invoice>(`/invoices/${id}/restore`, { method: 'POST' }),
 };

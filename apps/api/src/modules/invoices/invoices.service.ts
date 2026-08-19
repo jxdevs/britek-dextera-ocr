@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { Op, WhereOptions } from 'sequelize';
+import { literal, Op, WhereOptions } from 'sequelize';
 import {
   Approval,
   BoxAssignment,
@@ -51,6 +51,14 @@ export type UploadResult =
 const ANNEX_FIELDS = {
   attributes: ['id', 'doc_type', 'original_name', 'created_at'],
 };
+
+/**
+ * Nombre de quien confirmó la causación. Va como subconsulta y no como
+ * asociación porque `accrued_by` no declara @ForeignKey (ver el modelo).
+ */
+const ACCRUED_BY_NAME = literal(
+  '(SELECT w.name FROM workers w WHERE w.id = "Invoice"."accrued_by")',
+);
 
 /** Categorías que requieren aprobación especial (admin) */
 const RESTRICTED_CATEGORIES: ExpenseCategory[] = ['alimentacion'];
@@ -270,6 +278,7 @@ export class InvoicesService {
 
   async findOne(id: string) {
     const invoice = await this.invoices.findByPk(id, {
+      attributes: { include: [[ACCRUED_BY_NAME, 'accrued_by_name']] },
       include: [
         { model: Worker, attributes: ['id', 'name', 'document_number', 'phone'] },
         { model: PettyCashBox, attributes: ['id', 'code', 'name', 'type', 'status'] },
@@ -448,6 +457,50 @@ export class InvoicesService {
       entityLabel: `Factura restaurada desde la papelera: ${invoice.vendor_name ?? 'Sin proveedor'} - $${invoice.total}`,
       before: { deleted_at: invoice.deleted_at },
       after: { status: invoice.status, deleted_at: null },
+    });
+
+    return this.findOne(id);
+  }
+
+  /**
+   * Marca o revierte la causación contable de una factura. Es un estado aparte
+   * de `status`: solo se puede causar lo que ya está legalizado, y revertirlo
+   * queda registrado en auditoría igual que marcarlo.
+   */
+  async setAccrual(id: string, accrued: boolean, user: AuthUser) {
+    const invoice = await this.invoices.findByPk(id, {
+      include: [{ model: Worker, attributes: ['id', 'name'] }],
+    });
+    if (!invoice) throw new NotFoundException('Factura no encontrada');
+
+    if (accrued && invoice.status !== 'approved') {
+      throw new BadRequestException(
+        'Solo se pueden causar facturas legalizadas. Legaliza la factura primero.',
+      );
+    }
+
+    // Idempotente: dos clics seguidos no generan un segundo registro de auditoría.
+    if (!!invoice.accrued_at === accrued) return this.findOne(id);
+
+    const before = { accrued_at: invoice.accrued_at, accrued_by: invoice.accrued_by };
+
+    await invoice.update(
+      accrued
+        ? { accrued_at: new Date(), accrued_by: user.id }
+        : { accrued_at: null, accrued_by: null },
+    );
+
+    const label = `${invoice.vendor_name ?? 'Sin proveedor'} - $${invoice.total}`;
+    this.audit.log({
+      user,
+      action: 'update',
+      entity: 'invoice',
+      entityId: invoice.id,
+      entityLabel: accrued
+        ? `Factura causada: ${label}`
+        : `Causación revertida: ${label}`,
+      before,
+      after: { accrued_at: invoice.accrued_at, accrued_by: invoice.accrued_by },
     });
 
     return this.findOne(id);

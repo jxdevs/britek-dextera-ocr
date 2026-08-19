@@ -1,8 +1,9 @@
-import { AlertTriangle, Calendar, ChevronRight, Filter, Loader2, Plus, Users, User } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronRight, Filter, Loader2, Plus, SquareCheck, Users, User } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BoxFormModal } from '../components/BoxFormModal';
 import { pettyCash, type BoxStatus, type PettyCashBox } from '../lib/api';
+import { useScrollRestoration, useSessionState } from '../lib/listState';
 import { cn, formatMoney, getBalanceDisplay, getBoxConsumptionAlert } from '../lib/utils';
 
 export default function CajasPage() {
@@ -10,8 +11,9 @@ export default function CajasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [workerFilter, setWorkerFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'' | BoxStatus>('open');
+  // Los filtros se recuerdan al entrar a una caja y volver.
+  const [workerFilter, setWorkerFilter] = useSessionState('cajas:worker', '');
+  const [statusFilter, setStatusFilter] = useSessionState<'' | BoxStatus>('cajas:status', 'open');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -28,6 +30,9 @@ export default function CajasPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Devuelve al usuario a la misma altura de la lista al regresar del detalle.
+  useScrollRestoration('cajas:scroll', !loading && items.length > 0);
 
   // Extract unique workers from all boxes for the filter dropdown
   const uniqueWorkers = useMemo(() => {
@@ -53,6 +58,13 @@ export default function CajasPage() {
       ),
     [items, workerFilter, statusFilter],
   );
+
+  // Causación contable, sumada sobre las cajas visibles con los filtros puestos.
+  const accrual = useMemo(() => {
+    const accrued = filteredItems.reduce((sum, b) => sum + (b.accrued_count ?? 0), 0);
+    const pending = filteredItems.reduce((sum, b) => sum + (b.pending_accrual_count ?? 0), 0);
+    return { accrued, pending, total: accrued + pending };
+  }, [filteredItems]);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -122,6 +134,27 @@ export default function CajasPage() {
         </div>
       )}
 
+      {!loading && accrual.total > 0 && (
+        <div className="flex items-center gap-3 flex-wrap rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm">
+          <SquareCheck className="size-4 text-slate-400 shrink-0" />
+          <span className="font-medium text-slate-900">Causación contable</span>
+          <span className="text-slate-500 tabular-nums">
+            {accrual.accrued} de {accrual.total} facturas legalizadas
+            {hasFilters && ' (según filtros)'}
+          </span>
+          <span
+            className={cn(
+              'ml-auto inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset tabular-nums',
+              accrual.pending > 0
+                ? 'bg-orange-50 text-orange-700 ring-orange-200'
+                : 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+            )}
+          >
+            {accrual.pending > 0 ? `${accrual.pending} pendientes de causar` : 'Todo causado'}
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-sm text-rose-800">
           {error}
@@ -175,6 +208,10 @@ function BoxCard({ box }: { box: PettyCashBox }) {
 
   const consumption = (box.status === 'open' || box.status === 'blocked') ? getBoxConsumptionAlert(box.initial_amount, box.current_balance) : null;
 
+  const accrued = box.accrued_count ?? 0;
+  const pendingAccrual = box.pending_accrual_count ?? 0;
+  const accruable = accrued + pendingAccrual;
+
   return (
     <Link
       to={`/cajas/${box.id}`}
@@ -217,6 +254,24 @@ function BoxCard({ box }: { box: PettyCashBox }) {
             >
               {box.status === 'open' ? 'Abierta' : box.status === 'blocked' ? 'Bloqueada' : 'Cerrada'}
             </span>
+            {accruable > 0 && (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ring-1 ring-inset tabular-nums',
+                  pendingAccrual > 0
+                    ? 'bg-orange-50 text-orange-700 ring-orange-200'
+                    : 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+                )}
+                title={
+                  pendingAccrual > 0
+                    ? `${pendingAccrual} factura(s) legalizada(s) pendiente(s) de causación`
+                    : 'Todas las facturas legalizadas están causadas'
+                }
+              >
+                <SquareCheck className="size-2.5" />
+                {accrued}/{accruable} causadas
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             {box.code} ·{' '}
